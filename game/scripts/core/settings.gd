@@ -9,6 +9,7 @@ const QUALITY_NAMES: PackedStringArray = ["Low", "Medium", "High"]
 ## Audio buses under Master; every sound in the game is routed to one of them.
 const BUS_ENGINE: StringName = &"Engine"    ## engines and airflow, own and others'
 const BUS_EFFECTS: StringName = &"Effects"  ## guns, strikes, explosions
+const OUTPUT_CEILING_DB: float = -1.0       ## nothing leaves the game louder than this
 
 var mouse_sensitivity: float = 1.0
 var invert_y: bool = false
@@ -79,9 +80,23 @@ func save(path: String = PATH) -> void:
 
 ## Set the bus volumes, creating the Engine and Effects buses on first use.
 func apply_audio() -> void:
+	_guard_output()
 	_set_bus(&"Master", master_volume)
 	_set_bus(BUS_ENGINE, engine_volume)
 	_set_bus(BUS_EFFECTS, effects_volume)
+
+
+## A limiter on the output. Without one, a burst of gunfire over a full-throttle
+## engine overshoots full scale and is clipped, which sounds like a torn
+## speaker; with it the peak is turned down for an instant instead.
+static func _guard_output() -> void:
+	var master: int = AudioServer.get_bus_index(&"Master")
+	for i in range(AudioServer.get_bus_effect_count(master)):
+		if AudioServer.get_bus_effect(master, i) is AudioEffectHardLimiter:
+			return
+	var limiter: AudioEffectHardLimiter = AudioEffectHardLimiter.new()
+	limiter.ceiling_db = OUTPUT_CEILING_DB
+	AudioServer.add_bus_effect(master, limiter)
 
 
 static func _set_bus(bus_name: StringName, linear: float) -> void:

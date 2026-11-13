@@ -109,9 +109,9 @@ func build(initial: int, map_name: String = "") -> void:
 	footer.add_child(quit)
 
 	engine_preview = AudioStreamPlayer.new()
-	engine_preview.volume_db = -11.0
+	engine_preview.volume_db = -9.5
 	engine_preview.bus = GameSettings.BUS_ENGINE
-	engine_preview.pitch_scale = 0.84
+	engine_preview.pitch_scale = 0.9   # ticking over
 	add_child(engine_preview)
 	visible = false
 
@@ -147,7 +147,7 @@ func select(id: int, force: bool = false) -> void:
 	for i in range(cards.size()):
 		cards[i].add_theme_stylebox_override("panel", selected_style if i == selected else normal_style)
 		fly_buttons[i].modulate = Color(1, 1, 1, 1.0 if i == selected else 0.55)
-	engine_preview.stream = Sfx.looped(String(Airframes.spec(selected).engine_sound))
+	engine_preview.stream = Sfx.engine_loop(Airframes.spec(selected), false)
 	engine_preview.play()
 
 

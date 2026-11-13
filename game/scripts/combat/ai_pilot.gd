@@ -87,8 +87,22 @@ func sample(me: FlightModel, target: FlightModel, dt: float) -> FlightCommand:
 	if flat.length() > ARENA_RADIUS:
 		command.aim_direction = Vector3(-me.position.x, 0.0, -me.position.z).normalized()
 		command.fire = false
-	command.aim_direction = _keep_clear(me, command.aim_direction)
+	command.aim_direction = _keep_clear(me, _within_energy(me, command.aim_direction))
 	return command
+
+
+## Do not chase a target up a slope the aircraft has no speed for: the slower it
+## flies, the shallower the climb it may aim at (level at 1.3 times the stall
+## speed, anything from 75% of top speed). Avoiding the ground still comes first.
+func _within_energy(me: FlightModel, aim: Vector3) -> Vector3:
+	var slow: float = float(me.spec.stall) * 1.3
+	var steepest: float = lerpf(0.0, 0.95, clampf((me.speed - slow) / (float(me.spec.top_speed) * 0.75 - slow), 0.0, 1.0))
+	if aim.y <= steepest:
+		return aim
+	var flat: Vector3 = Vector3(aim.x, 0.0, aim.z)
+	if flat.length_squared() < 0.0001:
+		flat = Vector3(me.forward().x, 0.0, me.forward().z)
+	return (flat.normalized() * sqrt(1.0 - steepest * steepest) + Vector3.UP * steepest).normalized()
 
 
 func _pursue(me: FlightModel, target: FlightModel, to: Vector3, dist: float, dt: float) -> void:

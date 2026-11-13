@@ -14,7 +14,8 @@ extends Node3D
 ##   --clearance=METRES       autopilot height above ground (default 140)
 ##   --benchmark=SECONDS      autopilot + frame-time measurement, then quit
 ##   --benchmark-out=PATH     write benchmark results as JSON
-##   --screenshot=PATH --screenshot-at=SECONDS   save one frame
+##   --screenshot=PATH --screenshot-at=SECONDS   save one frame (several times, comma-separated, save PATH-1.png, PATH-2.png, ...)
+##   --fire                   diagnostics: the autopilot holds the trigger (tracers, gun heat)
 ##   --screenshot-when-firing  after that time, wait for the player's guns before saving
 ##   --zoom[=TIMES]           diagnostics: hold the gunsight zoom at TIMES, or at the aircraft's limit
 ##   --view=X,Y,Z,YAW,PITCH   fixed camera for map screenshots (metres, degrees; yaw 0 = north, 90 = west)
@@ -83,6 +84,9 @@ var hit_rng: RandomNumberGenerator = RandomNumberGenerator.new()   ## scatters b
 var elapsed: float = 0.0
 var screenshot_path: String = ""
 var screenshot_at: float = -1.0
+var screenshot_times: PackedFloat64Array = PackedFloat64Array()   ## further frames to save, in order
+var screenshot_count: int = 0
+var hold_fire: bool = false       ## --fire
 var quit_at: float = -1.0
 var benchmark_seconds: float = 0.0
 var benchmark_out: String = ""
@@ -148,7 +152,11 @@ func _ready() -> void:
 		elif arg.begins_with("--screenshot="):
 			screenshot_path = arg.trim_prefix("--screenshot=")
 		elif arg.begins_with("--screenshot-at="):
-			screenshot_at = float(arg.trim_prefix("--screenshot-at="))
+			screenshot_times = arg.trim_prefix("--screenshot-at=").split_floats(",")
+			screenshot_at = screenshot_times[0] if not screenshot_times.is_empty() else -1.0
+			screenshot_times = screenshot_times.slice(1)
+		elif arg == "--fire":
+			hold_fire = true
 		elif arg == "--zoom":
 			forced_zoom = 99.0
 		elif arg.begins_with("--zoom="):
@@ -222,8 +230,10 @@ func _ready() -> void:
 	weather.register(forest.needle_material)
 	weather.register(clouds.material)
 	effects = Effects.new()
+	effects.water_level = terrain.water_level
 	add_child(effects)
 	bullets = BulletField.new()
+	bullets.listening = not server_mode
 	add_child(bullets)
 	print("World built in %d ms" % (Time.get_ticks_msec() - t0))
 
@@ -369,6 +379,8 @@ func _start_flight(id: int, remember: bool = true) -> void:
 	aircraft = player.aircraft
 	audio.use_aircraft(Airframes.spec(aircraft_id))
 	bullets.clear()
+	bullets.viewer_id = player.id
+	bullets.viewer_team = player.team
 	_spawn()
 	for enemy in opponents:
 		enemy.kills = 0
@@ -583,10 +595,13 @@ func _physics_process(delta: float) -> void:
 		if c.shoot(cmd.fire, delta, bullets, 1.0 if c.is_player else AI_DAMAGE_SCALE) > 0:
 			c.aircraft.show_gunfire()
 			if c.is_player:
-				audio.shot()
+				audio.shot(model.gun_heat)
 				camera.extra_shake = maxf(camera.extra_shake, 0.35)
+	bullets.ear = model.position
 	for impact in bullets.step(delta, terrain, combatants):
 		_on_impact(impact)
+	if bullets.near_misses > 0 and model.alive:
+		audio.whizz()
 
 
 func _command_for(c: Combatant, delta: float) -> FlightCommand:
@@ -598,6 +613,7 @@ func _command_for(c: Combatant, delta: float) -> FlightCommand:
 	if autopilot != null:
 		var cmd: FlightCommand = autopilot.sample(model)
 		input.aim_direction = cmd.aim_direction
+		cmd.fire = hold_fire
 		return cmd
 	return input.sample(delta, model.position, model.forward())
 
@@ -669,6 +685,8 @@ func _process(delta: float) -> void:
 		camera.zoom = minf(zoom, input.max_zoom) if model.alive else 1.0
 		camera.follow(delta, input.aim_direction, shown, model)
 		input.aim_scale = camera.aim_scale()
+		Aircraft.listener_position = model.position
+		Aircraft.listener_velocity = model.velocity()
 		for c in combatants:
 			if c.aircraft != null and c.aircraft.visible:
 				c.aircraft.animate(c.model, delta)
@@ -702,10 +720,16 @@ func _process(delta: float) -> void:
 			Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME), Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME), foes])
 	var ready_for_shot: bool = not OS.get_cmdline_user_args().has("--screenshot-when-firing") or (model != null and model.firing and bullets.count() > 8)
 	if screenshot_at >= 0.0 and elapsed >= screenshot_at and ready_for_shot:
+		var several: bool = screenshot_count > 0 or not screenshot_times.is_empty()
+		screenshot_count += 1
+		var path: String = screenshot_path if not several else "%s-%d.png" % [screenshot_path.trim_suffix(".png"), screenshot_count]
 		screenshot_at = -1.0
+		if not screenshot_times.is_empty():
+			screenshot_at = screenshot_times[0]
+			screenshot_times = screenshot_times.slice(1)
 		var image: Image = get_viewport().get_texture().get_image()
-		image.save_png(screenshot_path)
-		print("Screenshot saved: ", screenshot_path)
+		image.save_png(path)
+		print("Screenshot saved: ", path)
 	if quit_at > 0.0 and elapsed >= quit_at:
 		get_tree().quit()
 
@@ -995,6 +1019,8 @@ func _apply_match_start(msg: Dictionary) -> void:
 		player.ai = AiPilot.new()
 		player.ai.setup(terrain, 7 + me)
 	audio.use_aircraft(Airframes.spec(player.frame_id))
+	bullets.viewer_id = player.id
+	bullets.viewer_team = player.team
 	input.reset(model.forward())
 	camera.snap(model.forward(), model.position)
 	hud.attach(player, opponents)
@@ -1019,6 +1045,10 @@ func _physics_online(delta: float) -> void:
 				c.aircraft.transform = c.model.transform()
 			# Their guns are drawn here; their game decides what the rounds hit.
 			var firing: bool = (int(snap.flags) & NetProtocol.FLAG_FIRING) != 0
+			if firing and c.model.gun_overheated:
+				# Their game says the guns are firing: our estimate of their heat ran ahead.
+				c.model.gun_overheated = false
+				c.model.gun_heat = minf(c.model.gun_heat, 0.95)
 			if c.shoot(firing, delta, bullets, 1.0, true) > 0 and c.aircraft != null:
 				c.aircraft.show_gunfire()
 			continue
@@ -1030,13 +1060,17 @@ func _physics_online(delta: float) -> void:
 			continue
 		if c.shoot(cmd.fire, delta, bullets) > 0:
 			c.aircraft.show_gunfire()
-			audio.shot()
+			audio.shot(c.model.gun_heat)
 			camera.extra_shake = maxf(camera.extra_shake, 0.35)
+	if player != null:
+		bullets.ear = player.model.position
 	for impact in bullets.step(delta, terrain, combatants):
 		if impact.has("ground"):
 			effects.puff(impact.point)
 		else:
 			_local_hit(impact)
+	if bullets.near_misses > 0 and player != null and player.model.alive:
+		audio.whizz()
 	if player != null and net_tick % 2 == 0:
 		var state: Dictionary = SnapshotBuffer.capture(player.model, player.life, net_tick)
 		if net.is_host():

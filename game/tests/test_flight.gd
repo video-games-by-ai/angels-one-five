@@ -12,12 +12,18 @@ func _init() -> void:
 	_test_terrain_sampling()
 	_test_turn_right_banks_right()
 	_test_aim_up_climbs()
+	_test_climbing_costs_speed()
+	_test_engine_follows_the_flying()
 	_test_level_assist_rolls_level()
 	_test_boost_drains_and_speeds_up()
 	_test_ground_collision()
 	_test_classes_differ()
 	_test_mouse_aim()
 	_test_fire_rate()
+	_test_gun_heat()
+	_test_scatter_and_near_misses()
+	_test_engine_sound_mix()
+	_test_spotting_scale()
 	_test_guns_hit_and_destroy()
 	_test_heavy_outlasts_light()
 	_test_damage_zones()
@@ -92,6 +98,84 @@ func _test_aim_up_climbs() -> void:
 	check(m.speed < float(m.spec.top_speed), "climbing bleeds speed")
 
 
+## Shallow climbs are cheap, steep ones are not, nothing hangs on its propeller,
+## and an aircraft that runs out of speed drops its nose and flies again.
+func _test_climbing_costs_speed() -> void:
+	var cmd: FlightCommand = FlightCommand.new()
+	for frame in range(Airframes.COUNT):
+		var spec: Dictionary = Airframes.spec(frame)
+		var short: String = String(spec.short)
+		var stall: float = float(spec.stall)
+		var boost_pull: float = float(spec.thrust) * pow(float(spec.boost_speed) / float(spec.top_speed), 2.0)
+		check(boost_pull * FlightModel.climb_thrust(1.0) < FlightModel.GRAVITY * 0.6, "%s: straight up, gravity beats the engine even on boost" % short)
+		# Straight up at full throttle with boost: the speed runs out, the nose
+		# falls through the horizon and the aircraft is flying again soon after.
+		var m: FlightModel = _model(frame)
+		cmd.aim_direction = Vector3(0.0, 1.0, -0.02).normalized()
+		cmd.throttle_axis = 1.0
+		cmd.boost = true
+		var stalled_at: float = -1.0
+		var top_y: float = m.position.y
+		var nose_fell: bool = false
+		var recovered_at: float = -1.0
+		for i in range(30 * 60):
+			m.step(cmd, 1.0 / 60.0, terrain)
+			top_y = maxf(top_y, m.position.y)
+			if stalled_at < 0.0 and m.stalled:
+				stalled_at = i / 60.0
+			if stalled_at >= 0.0 and m.forward().y < 0.0:
+				nose_fell = true
+			if nose_fell and not m.stalled:
+				recovered_at = i / 60.0
+				break
+		var gained: float = top_y - (terrain.spawn_position.y + 900.0)
+		check(stalled_at > 4.0 and stalled_at < 14.0 and gained < 1100.0, "%s: a vertical climb on boost runs out of speed (after %.1f s, %d m up)" % [short, stalled_at, int(gained)])
+		check(nose_fell and recovered_at > 0.0 and recovered_at - stalled_at < 6.0 and m.alive and not m.near_stall(),
+			"%s: stalled, the nose falls below the horizon and it flies again (%.1f s later)" % [short, recovered_at - stalled_at])
+		# A 15 degree climb at the default throttle goes on for as long as you like.
+		m = _model(frame)
+		_fly(m, Vector3(0.0, sin(deg_to_rad(15.0)), -cos(deg_to_rad(15.0))), 15.0)
+		check(m.speed > stall * 1.6 and m.speed < float(spec.top_speed) * 0.82 and m.forward().y > 0.2,
+			"%s: a 15 degree climb settles at a slower, safe speed (%d m/s)" % [short, int(m.speed)])
+		# A 45 degree dive runs past the level top speed.
+		m = _model(frame)
+		m.position.y += 1200.0
+		_fly(m, Vector3(0.0, -1.0, -1.0), 10.0)
+		check(m.alive and m.speed > float(spec.top_speed) * 1.05, "%s: a dive runs past the level top speed (%d m/s)" % [short, int(m.speed)])
+	check(is_equal_approx(FlightModel.climb_thrust(-0.5), 1.0) and FlightModel.climb_thrust(0.17) > 0.97 and FlightModel.climb_thrust(0.7) < 0.65,
+		"the engine pulls fully in a dive and a 10 degree climb, and loses over a third at 45 degrees")
+
+
+## The engine note follows the flying: it labours uphill and runs away downhill
+## at the same throttle setting.
+func _test_engine_follows_the_flying() -> void:
+	var level: FlightModel = _model()
+	level.throttle = 1.0
+	level.speed = float(level.spec.top_speed)
+	var climbing: FlightModel = _model()
+	climbing.throttle = 1.0
+	climbing.orientation = Quaternion(Vector3.RIGHT, deg_to_rad(70.0))
+	climbing.speed = float(climbing.spec.top_speed) * 0.45
+	var diving: FlightModel = _model()
+	diving.throttle = 1.0
+	diving.orientation = Quaternion(Vector3.RIGHT, deg_to_rad(-70.0))
+	diving.speed = float(diving.spec.top_speed) * 1.25
+	var pulling: FlightModel = _model()
+	pulling.throttle = 1.0
+	pulling.speed = float(pulling.spec.top_speed)
+	pulling.g_load = 6.0
+	check(is_zero_approx(level.engine_load()) and climbing.engine_load() > 0.8 and diving.engine_load() < -0.8 and pulling.engine_load() > 0.2,
+		"the engine is loaded in a climb and a hard pull, unloaded in a dive")
+	var r_level: float = Sfx.engine_rpm(level)
+	var r_climb: float = Sfx.engine_rpm(climbing)
+	var r_dive: float = Sfx.engine_rpm(diving)
+	check(r_climb < r_level - 0.18 and r_dive > r_level + 0.1 and Sfx.engine_rpm(pulling) < r_level - 0.03,
+		"the revs sag in a steep climb and run up in a dive (%.2f, %.2f level, %.2f)" % [r_climb, r_level, r_dive])
+	check(Sfx.engine_layers(r_climb)[1] > 0.95 and Sfx.engine_layers(r_dive)[3] > 0.95, "a labouring engine is on its low loop, a diving one on its high loop")
+	climbing.throttle = 0.25
+	check(climbing.engine_load() < 0.65, "a throttled-back engine labours less")
+
+
 func _test_level_assist_rolls_level() -> void:
 	var m: FlightModel = _model()
 	m.orientation = Quaternion(Vector3.FORWARD, deg_to_rad(50.0))  # banked
@@ -146,6 +230,152 @@ func _test_fire_rate() -> void:
 	var mid: Dictionary = Airframes.spec(Airframes.Id.MUSTANG)
 	check(float(s.top_speed) > float(mid.top_speed) and float(mid.top_speed) > float(t.top_speed), "speed falls light > medium > heavy")
 	check(float(s.hull) < float(mid.hull) and float(mid.hull) < float(t.hull), "hull rises light < medium < heavy")
+
+
+## Holding the trigger: full rate at first, slower as the guns heat, then they
+## stop and must cool. Bursts with pauses never overheat.
+func _test_gun_heat() -> void:
+	var dt: float = 1.0 / 60.0
+	for frame in range(Airframes.COUNT):
+		var m: FlightModel = _model(frame)
+		var limit: float = float(m.spec.gun_heat_time)
+		var rate: float = float(m.spec.fire_rate)
+		var early: int = 0
+		var late: int = 0
+		var time: float = 0.0
+		while not m.gun_overheated and time < 30.0:
+			var rounds: int = m.rounds_this_step(true, dt)
+			if time < 1.0:
+				early += rounds
+			elif time >= limit - 1.0:
+				late += rounds
+			time += dt
+		check(absf(time - limit) < 0.35, "%s guns overheat after %.1f s of unbroken fire (%.2f s)" % [m.spec.short, limit, time])
+		check(absf(early - rate) <= 1.5 and late < early * 0.6, "%s fires slower as the guns heat (%d rounds in the first second, %d in the last)" % [m.spec.short, early, late])
+		var stopped: int = 0
+		for i in range(60):
+			stopped += m.rounds_this_step(true, dt)
+		check(stopped == 0 and not m.firing, "%s overheated guns do not fire" % m.spec.short)
+	var m: FlightModel = _model()
+	while not m.gun_overheated:
+		m.rounds_this_step(true, dt)
+	var wait: float = 0.0
+	while m.rounds_this_step(true, dt) == 0 and wait < 30.0:
+		wait += dt
+	var expected: float = (1.0 - FlightModel.GUN_RESUME) * FlightModel.GUN_COOL_TIME
+	check(absf(wait - expected) < 0.2, "overheated guns fire again after %.1f s of cooling (%.2f s)" % [expected, wait])
+	m = _model()
+	m.gun_heat = 1.0
+	m.gun_overheated = true
+	var cooling: float = 0.0
+	while m.gun_heat > 0.0 and cooling < 30.0:
+		m.rounds_this_step(false, dt)
+		cooling += dt
+	check(absf(cooling - FlightModel.GUN_COOL_TIME) < 0.2, "red-hot guns cool completely in %d s (%.2f s)" % [int(FlightModel.GUN_COOL_TIME), cooling])
+	# One-second bursts with two-second pauses, for a minute: never too hot.
+	m = _model()
+	var hottest: float = 0.0
+	for i in range(3600):
+		m.rounds_this_step(i % 180 < 60, dt)
+		hottest = maxf(hottest, m.gun_heat)
+	check(not m.gun_overheated and hottest < FlightModel.GUN_SLOW_FROM, "short bursts with pauses keep the guns at full rate (hottest %.2f)" % hottest)
+	check(is_equal_approx(FlightModel.gun_rate_factor(0.3), 1.0) and is_equal_approx(FlightModel.gun_rate_factor(1.0), FlightModel.GUN_SLOWEST)
+		and FlightModel.gun_scatter_factor(1.0) > FlightModel.gun_scatter_factor(0.0), "hot guns fire slower and scatter more")
+
+
+func _test_scatter_and_near_misses() -> void:
+	var furthest: float = 0.0
+	var centre: Vector2 = Vector2.ZERO
+	for i in range(200):
+		furthest = maxf(furthest, Combatant.scatter(i).length())
+		centre += Combatant.scatter(i) / 200.0
+	check(furthest <= 1.0 and furthest > 0.9 and centre.length() < 0.08, "the scatter pattern fills a unit disc evenly (reach %.2f, centre off by %.3f)" % [furthest, centre.length()])
+	check(Combatant.scatter(17) == Combatant.scatter(17), "the scatter pattern repeats exactly")
+	# Rounds leave within the cold spread of the gun line.
+	var high: Vector3 = terrain.spawn_position + Vector3(0, 900, 0)
+	var shooter: Combatant = _combatant(0, 0, Airframes.Id.MUSTANG, high)
+	var field: BulletField = BulletField.new()
+	field.viewer_id = 5
+	field.viewer_team = 1
+	for i in range(30):
+		shooter.shoot(true, 1.0 / 60.0, field)
+	var widest: float = 0.0
+	for v in field.velocities:
+		# Measured from straight ahead, so it includes the guns' slight toe-in.
+		widest = maxf(widest, (v - shooter.model.velocity()).normalized().angle_to(Vector3.FORWARD))
+	check(widest < 0.012, "rounds leave close to the gun line (widest %.4f rad)" % widest)
+	check(field.tints[0] == BulletField.TINT_HOSTILE, "another side's rounds are drawn in the hostile colour")
+	field.clear()
+	field.viewer_id = 0
+	field.viewer_team = 0
+	for i in range(10):
+		shooter.shoot(true, 1.0 / 60.0, field)
+	check(field.count() > 0 and field.tints[0] == BulletField.TINT_OWN, "the viewer's own rounds are drawn in their own colour")
+	field.free()
+	# A round passing 10 m from the listener is heard once; one 60 m away is not.
+	var from: Vector3 = Vector3(0, 0, 0)
+	var to: Vector3 = Vector3(0, 0, -14.7)
+	check(BulletField.passes_close(from, to, Vector3(10, 0, -7), BulletField.NEAR_MISS), "a round passing 10 m away counts as a near miss")
+	check(not BulletField.passes_close(from, to, Vector3(10, 0, -30), BulletField.NEAR_MISS), "it counts only in the step where it passes")
+	check(not BulletField.passes_close(from, to, Vector3(60, 0, -7), BulletField.NEAR_MISS), "a round 60 m away is not a near miss")
+
+
+## The two engine loops hand over smoothly as the revs rise.
+func _test_engine_sound_mix() -> void:
+	var ok: bool = true
+	var last_low: float = 2.0
+	for i in range(41):
+		var rpm: float = lerpf(0.6, 1.4, i / 40.0)
+		var layers: PackedFloat32Array = Sfx.engine_layers(rpm)
+		ok = ok and absf(layers[1] * layers[1] + layers[3] * layers[3] - 1.0) < 0.001 and layers[1] <= last_low + 0.0001
+		last_low = layers[1]
+	check(ok, "the engine loops crossfade at constant power, low loop fading as revs rise")
+	check(is_equal_approx(Sfx.engine_layers(Sfx.ENGINE_LOW_AT)[0], 1.0) and is_equal_approx(Sfx.engine_layers(Sfx.ENGINE_HIGH_AT)[2], 1.0),
+		"each engine loop plays at its natural speed at its own RPM")
+	check(Sfx.engine_layers(0.7)[3] < 0.01 and Sfx.engine_layers(1.2)[1] < 0.01, "idle is all low loop, boost all high loop")
+	var m: FlightModel = _model()
+	m.throttle = 0.25
+	var idle: float = Sfx.engine_rpm(m)
+	m.throttle = 1.0
+	var full: float = Sfx.engine_rpm(m)
+	m.boosting = true
+	var boost: float = Sfx.engine_rpm(m)
+	m.zone_health[Airframes.Zone.ENGINE] = 0.0
+	check(idle < full and full < boost and Sfx.engine_rpm(m) < boost, "engine RPM rises with throttle and boost, and a shot-up engine labours")
+	var away: float = Sfx.doppler(Vector3(0, 0, -500), Vector3(0, 0, -150), Vector3.ZERO, Vector3.ZERO)
+	var toward: float = Sfx.doppler(Vector3(0, 0, -500), Vector3(0, 0, 150), Vector3.ZERO, Vector3.ZERO)
+	check(away < 0.75 and toward > 1.3 and is_equal_approx(Sfx.doppler(Vector3(0, 0, -500), Vector3(150, 0, 0), Vector3.ZERO, Vector3.ZERO), 1.0),
+		"an aircraft sounds higher coming at you and lower going away (%.2f, %.2f)" % [toward, away])
+	for frame in range(Airframes.COUNT):
+		var spec: Dictionary = Airframes.spec(frame)
+		var found: bool = true
+		for suffix: String in ["_low.wav", "_high.wav"]:
+			found = found and ResourceLoader.exists(String(spec.engine_sound) + suffix)
+		# The loops are kept exactly as generated (no lossy compression) and never touch full scale.
+		var clean: bool = true
+		var loudest: int = 0
+		for high: bool in [false, true]:
+			var loop: AudioStreamWAV = Sfx.engine_loop(spec, high)
+			clean = clean and loop.format == AudioStreamWAV.FORMAT_16_BITS and loop.stereo
+			var data: PackedByteArray = loop.data
+			for at in range(0, data.size() - 1, 2):
+				loudest = maxi(loudest, absi(data.decode_s16(at)))
+		check(clean and loudest > 12000 and loudest < 30000, "%s engine loops are uncompressed and unclipped (peak %.1f dB)" % [String(spec.short), linear_to_db(loudest / 32768.0)])
+		for take in range(1, Sfx.GUN_TAKES + 1):
+			found = found and ResourceLoader.exists("%s_%d.wav" % [String(spec.gun_sound), take])
+		check(found, "%s has both engine loops and every gun take" % spec.short)
+
+
+func _test_spotting_scale() -> void:
+	check(is_equal_approx(Aircraft.spot_scale(100.0), 1.0) and is_equal_approx(Aircraft.spot_scale(Aircraft.SPOT_FROM), 1.0), "aircraft are true to size at gun range")
+	var grows: bool = true
+	var shrinks_on_screen: bool = true
+	for d in range(700, 6000, 100):
+		grows = grows and Aircraft.spot_scale(d + 100.0) >= Aircraft.spot_scale(float(d))
+		shrinks_on_screen = shrinks_on_screen and Aircraft.spot_scale(d + 100.0) / (d + 100.0) < Aircraft.spot_scale(float(d)) / d
+	check(grows and shrinks_on_screen and Aircraft.spot_scale(9000.0) <= Aircraft.SPOT_MAX, "distant aircraft are drawn larger but still look smaller the further away they are")
+	check(Aircraft.spot_scale(2000.0) > 1.8, "an aircraft 2 km away is drawn about twice life size (%.2f)" % Aircraft.spot_scale(2000.0))
+	check(is_equal_approx(Effects.far_scale(100.0), 1.0) and Effects.far_scale(900.0) > 2.0 and Effects.far_scale(5000.0) <= Effects.FAR_MAX, "strike effects grow with distance up to a limit")
 
 
 ## Seconds of sustained fire from `shooter_frame`, from dead astern, to destroy `target_frame`.
@@ -593,6 +823,12 @@ func _test_volume_settings_persist() -> void:
 	var engine_bus: int = AudioServer.get_bus_index(GameSettings.BUS_ENGINE)
 	var effects_bus: int = AudioServer.get_bus_index(GameSettings.BUS_EFFECTS)
 	check(engine_bus > 0 and effects_bus > 0, "engine and effects buses exist")
+	loaded.apply_audio()
+	var limiters: int = 0
+	for i in range(AudioServer.get_bus_effect_count(0)):
+		if AudioServer.get_bus_effect(0, i) is AudioEffectHardLimiter:
+			limiters += 1
+	check(limiters == 1, "the output has one limiter, however often the volumes are applied")
 	check(absf(AudioServer.get_bus_volume_db(0) - linear_to_db(0.35)) < 0.01
 		and absf(AudioServer.get_bus_volume_db(engine_bus) - linear_to_db(0.5)) < 0.01, "bus volumes follow the settings")
 	check(AudioServer.is_bus_mute(effects_bus), "zero volume mutes the effects bus")

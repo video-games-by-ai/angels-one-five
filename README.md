@@ -24,8 +24,9 @@ Linux, are still to do, as are rockets and practice targets (see
 | Firepower | 96 damage/s | 130 damage/s | 196 damage/s |
 | Hull | 80 | 100 | 135 (and a bigger target) |
 | Gunsight zoom | up to 3× | up to 4× | up to 6× |
-| Engine sound | Smooth Merlin V-12 purr | Rough Packard Merlin V-12 | Deep, lumpy 18-cylinder radial |
-| Guns | Crisp, fast rattle | Heavy .50 cal punch | Eight-gun thump |
+| Unbroken fire before the guns overheat | 8 s | 7 s | 6 s |
+| Engine sound | Smooth, quick Merlin growl | Deeper Merlin growl, a shade rougher | Low rolling radial note |
+| Guns | Quick, dull rattle | Heavy .50 cal punch | Eight-gun thump |
 
 Real dimensions; balance is tuned for play, not history. The selection screen
 appears before each sortie (and from the pause menu); hovering a card plays that
@@ -41,6 +42,47 @@ It fades in when you aim at or hit that aircraft, stays two seconds after you lo
 away, then fades out; aiming at another opponent swaps it over. Online, holes from
 other players' rounds are placed at random inside the zone that was hit, because
 only the zone is sent over the network.
+
+**Guns and heat.** Firing heats the guns; the GUNS bar in the status strip and
+an arc under the gun cross show how hot they are. For the first half of the
+time in the table they fire at the full rate. After that the rate drops round
+by round to under a third, the rounds scatter more, and at the limit the guns
+stop ("GUNS OVERHEATED"). They cool only while silent: 10 seconds from red-hot
+to cold, and overheated guns come back after 4 seconds, at the tick on the
+bar. One-second bursts with short pauses never overheat. Hot guns smoke at the
+muzzles. Opponents' guns follow the same rule.
+
+Your own tracers glow gold, a team-mate's pale and everyone else's red. Each
+round leaves a thin wisp of smoke, and a hostile round passing close is heard.
+Hits flash and throw sparks; misses raise dust on the ground or a splash on the
+lake. Strike effects and other aircraft are drawn larger than life at range
+(an aircraft about twice its size at 2 km, never more than 2.5 times) so both
+can be read from far away; hits are judged on the true size. Opponents carry a
+bracket with name and range and no aiming mark: lead a turning target by eye
+and correct from the tracers.
+
+**Energy.** Height and speed trade against each other. A dive runs the
+aircraft past its level top speed; a climb costs speed, and the steeper the
+climb the less the labouring engine can add (a fifth of its thrust straight
+up), so nothing hangs on its propeller: pointed at the sky from top speed an
+aircraft is out of flying speed in 7 to 10 seconds, even on boost. Then it
+stalls: the HUD warns, the nose falls below the horizon and the controls come
+back as the speed does. About 30° is a climb that can be held at full throttle.
+
+**Engines.** Each engine is two loops, low revs and high revs, crossfaded as
+the RPM rises, so the note climbs without the sound turning thin. They are
+tuned against recordings of the real aircraft (measured, not sampled): the two
+Merlins fire 210 to 240 times a second at full throttle and are heard as a
+growl at half that, one cylinder bank at a time; the Thunderbolt's radial is
+a deep note at a third of its firing rate with a slow roll in it. The loops
+are clean on purpose: the engine's own harmonics carry the sound, with no
+distortion, a trace of exhaust breath, peaks kept under full scale, and nearly
+all the energy below 600 Hz. They are imported uncompressed, and a limiter on
+the output keeps gunfire over a full-throttle engine from clipping. The revs
+follow the flying, not only the throttle:
+they sag by up to a quarter and the engine shudders and grows louder as it
+labours up a steep climb, dip in a hard pull, and run up in a dive. Other
+aircraft rise in pitch as they come at you and drop as they pass.
 
 Opponents fly the same flight model as you. They patrol, attack in passes, fire
 short bursts, break away when hit and avoid the mountains. Each one that goes
@@ -204,7 +246,7 @@ Everything is original or freely licensed; nothing is downloaded at build time
 | Plav & Gusinje: the same from surveyed elevations, plus gravel beds, brooks, reed beds, settlements and house positions | `source-assets/plav_dem.npz` → `tools/generate_plav.py` | `game/assets/terrain/plav_*`, `docs/plav_preview.png`, `docs/plav_layers.png` |
 | Spitfire Mk IX, P-51D Mustang, P-47D Thunderbolt (moving prop, ailerons, elevators, rudder; fictional markings) | `tools/build_aircraft.py` → `source-assets/{spitfire,mustang,thunderbolt}.blend` | `game/assets/models/*.glb` |
 | Conifers | `tools/build_trees.py` → `source-assets/trees.blend` | `game/assets/models/trees.glb` |
-| Three engine sounds, three gun sounds, hits, explosion, wind (synthesised) | `tools/generate_audio.py` | `game/assets/audio/` |
+| Three engines (two loops each), three guns (three takes each), gun jam, near miss, hits, explosion, wind (synthesised) | `tools/generate_audio.py` | `game/assets/audio/` |
 | Packages for Linux and Windows | `tools/build_release.sh` | `build/` |
 
 Rebuild steps:
@@ -246,7 +288,10 @@ route for the AI, snow shower sites and the look (snow line, colours).
 
 The release script also runs the headless flight tests in
 `game/tests/test_flight.gd`. They cover terrain sampling, turning, climbing,
-levelling, boost, collision, class balance, mouse/invert handling, fire rates,
+the cost of steep climbs and the stall, levelling, boost, collision, class balance, mouse/invert handling, fire rates,
+gun heat (slowing, stopping, cooling), round scatter, tracer colours, near misses,
+the engine sound mix, revs that follow climbs and dives, unclipped and
+uncompressed engine loops, the output limiter, fly-by pitch, the larger drawing of distant aircraft,
 hits and misses, time to kill per aircraft, damage zones and their effects, the
 slowdown of burning aircraft, the trail stages, health dots, bullet-hole placement, the target panel's fading, radar placement, and
 AI pilots hunting for three minutes without crashing. The Plav & Gusinje map is
@@ -276,6 +321,13 @@ For an unattended demo, `--ai-player` lets an AI fly and fight for you, and
 `--autopilot --no-hud --screenshot=...`) takes a picture from a fixed camera.
 `--opponent-hull=0.9,0.5,0.15` starts the opponents already damaged, to check
 the trail, smoke and health-dot stages.
+`--autopilot --fire` holds the trigger, to watch the tracers and the guns
+heating up; `--screenshot-at=2,6,8` saves several frames in one run.
+`python3 tools/generate_audio.py --audition` also writes
+`build/engine_audition.wav`: each engine run from idle up to boost and back
+through the same mix the game uses, for listening without starting the game.
+It prints each loop's peak level and band shares, and refuses to write an
+engine loop that would clip.
 
 ### Code layout (`game/scripts/`)
 
@@ -294,7 +346,7 @@ can be added without changing the flight code.
 ## Roadmap
 
 1. **Flyable scene (done):** valley, lighting, clouds, forests, lake, Mustang, flight model, chase camera, HUD, settings, audio, Linux/Windows builds, benchmark.
-2. **Combat (mostly done):** guns with tracers, muzzle flash, hit sparks and sounds, hit confirmation, a lead ring as aim help, damage zones driving the airframe panel, a flight-path trail behind every aircraft that turns from a faint line to black smoke and fire as it is shot up (burning aircraft fly up to 28% slower), five health dots on the aircraft in front of the guns, a fading target panel with that aircraft's damage and bullet holes, a see-through radar map, AI fighters that pursue, evade and explode. Still to do: limited rockets and static practice targets. Design and sketches: [docs/combat-readability-design.md](docs/combat-readability-design.md).
+2. **Combat (mostly done):** guns that overheat, coloured tracers with smoke wisps, muzzle flash, hit sparks and sounds, hit confirmation, damage zones driving the airframe panel, a flight-path trail behind every aircraft that turns from a faint line to black smoke and fire as it is shot up (burning aircraft fly up to 28% slower), five health dots on the aircraft in front of the guns, a fading target panel with that aircraft's damage and bullet holes, a see-through radar map, AI fighters that pursue, evade and explode. Still to do: limited rockets and static practice targets. Design and sketches: [docs/combat-readability-design.md](docs/combat-readability-design.md).
 3. **Aircraft choice (done):** Spitfire Mk IX, P-51D Mustang and P-47D Thunderbolt, each with its own engine and gun sound, and a selection screen before every sortie, with Host match and Join match entries.
 4. **Multiplayer (built, tested on one machine):** host/join with a pasted invite over one host-opened UDP port, 2 to 4 players free-for-all, host-decided damage and score, smooth remote aircraft, respawn and rematch, UPnP and address help, and a dedicated server mode. Still to do: a match between two homes over the internet. Design: [docs/multiplayer-design.md](docs/multiplayer-design.md).
 5. **Release check:** run natively on Windows, cross-play between Windows and Linux, and a final performance pass.

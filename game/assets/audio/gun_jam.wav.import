@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://csk86t2qwaf7x"
-path="res://.godot/imported/gun_medium.wav-a1a1fbe5208f1a2869d624d221fa463a.sample"
+uid="uid://dm6juo0flhjis"
+path="res://.godot/imported/gun_jam.wav-e3de49c714ee9455c4a5e511a3ce6a1d.sample"
 
 [deps]
 
-source_file="res://assets/audio/gun_medium.wav"
-dest_files=["res://.godot/imported/gun_medium.wav-a1a1fbe5208f1a2869d624d221fa463a.sample"]
+source_file="res://assets/audio/gun_jam.wav"
+dest_files=["res://.godot/imported/gun_jam.wav-e3de49c714ee9455c4a5e511a3ce6a1d.sample"]
 
 [params]
 

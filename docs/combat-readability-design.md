@@ -150,3 +150,17 @@ Measured: about 180 FPS on the test machine (1600 × 900, High) in a fight with
 three trailing opponents. The headless flight tests check the slowdown (15% hull
 flies at 74% of full speed, 45% hull at full speed), the trail stages, the dot
 counts and radar placement.
+
+## Changes on 13 November 2026
+
+- **No lead ring.** The red ring and line ahead of each opponent are gone, at the
+  owner's request: a marker should not show where an opponent is heading. Aiming
+  the right distance ahead still counts as aiming at it for the health dots and
+  the target panel. Aim help now comes from the tracers.
+- **Crisper markers.** Brackets and labels have a dark edge and sit on whole
+  pixels, so they read on snow and bright sky.
+- **Larger at range.** Aircraft other than your own are drawn larger than life
+  beyond 700 m (`Aircraft.spot_scale`), haze is not applied to aircraft, and the
+  valley haze is about a fifth lighter.
+- **Gun heat** has a bar in the status strip and an arc under the gun cross; see
+  the README.

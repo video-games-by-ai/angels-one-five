@@ -5,6 +5,7 @@ extends RefCounted
 
 const PLAYER_HIT_RADIUS: float = 4.4   ## the player is a slightly smaller target
 const ENEMY_HIT_RADIUS: float = 7.0    ## forgiving aim against opponents
+const GUN_SPREAD: float = 0.0022       ## radians a round may leave off the gun line when cold: about 1 m at 450 m
 
 var id: int = 0
 var team: int = 0
@@ -50,10 +51,25 @@ func spawn(at: Vector3, heading: float) -> void:
 
 ## Fire whatever rounds are due this step into the bullet field. Returns how many.
 ## `cosmetic` rounds are drawn but hit nothing (another machine decides those hits).
+## Each round leaves a fraction of a degree off the line of the guns, more as the
+## barrels heat up. The pattern follows the round count, so it repeats exactly.
 func shoot(trigger: bool, dt: float, bullets: BulletField, damage_scale: float = 1.0, cosmetic: bool = false) -> int:
 	var rounds: int = model.rounds_this_step(trigger, dt)
-	for r in range(rounds):
-		var gun: Array[Vector3] = model.muzzle(gun_index)
-		gun_index += 1
-		bullets.fire(id, team, gun[0], gun[1], model.velocity(), float(model.spec.gun_damage) * damage_scale, cosmetic)
+	if rounds > 0:
+		var frame: Basis = model.basis()
+		var spread: float = GUN_SPREAD * FlightModel.gun_scatter_factor(model.gun_heat)
+		for r in range(rounds):
+			var gun: Array[Vector3] = model.muzzle(gun_index)
+			var off: Vector2 = scatter(gun_index) * spread
+			gun_index += 1
+			bullets.fire(id, team, gun[0], (gun[1] + frame.x * off.x + frame.y * off.y).normalized(), model.velocity(),
+				float(model.spec.gun_damage) * damage_scale, cosmetic)
 	return rounds
+
+
+## Where round number `index` lands inside a unit disc: an even fill that never
+## bunches up (a low-discrepancy sequence), and the same in every game that counts
+## the same rounds.
+static func scatter(index: int) -> Vector2:
+	var radius: float = sqrt(fposmod(0.5 + float(index) * 0.7548776662, 1.0))
+	return Vector2.from_angle(fposmod(0.5 + float(index) * 0.5698402910, 1.0) * TAU) * radius

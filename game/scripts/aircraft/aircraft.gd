@@ -2,12 +2,22 @@ class_name Aircraft
 extends Node3D
 ## Visual aircraft: imported Blender model, painted or bare-metal skin, moving
 ## control surfaces, propeller blur, exhaust smoke, boost flames, wingtip vapour
-## trails, muzzle flashes, a flight-path trail and battle-damage smoke and fire
-## that darken with the hull, and (for other aircraft) its own engine and gun
-## sounds in the world.
+## trails, muzzle flashes, smoke from hot guns, a flight-path trail and
+## battle-damage smoke and fire that darken with the hull, and (for other
+## aircraft) its own engine and gun sounds in the world. Other aircraft are drawn
+## a little larger the further away they are, so they stay readable at range.
 
 const TEAM_COLORS: Array[Color] = [Color("f2b33d"), Color("4db4f0"), Color("ff7a3d")]
 const SURFACE_DEFLECTION: float = deg_to_rad(20.0)
+const SPOT_FROM: float = 700.0      ## metres: beyond this a distant aircraft is drawn larger
+const SPOT_SHARE: float = 0.6       ## how much of the shrinking with distance is made up for
+const SPOT_MAX: float = 2.5         ## never drawn larger than this
+const FLASH_TIME: float = 0.05
+
+## Where the player listens from, for the pitch of aircraft flying past.
+static var listener_position: Vector3 = Vector3.ZERO
+static var listener_velocity: Vector3 = Vector3.ZERO
+static var flame_mesh: ArrayMesh
 
 var model_root: Node3D
 var propeller: Node3D
@@ -20,7 +30,10 @@ var exhausts: Array[GPUParticles3D] = []
 var flames: Array[GPUParticles3D] = []
 var trails: Array[TipTrail] = []
 var tips: Array[Node3D] = []
-var flashes: Array[MeshInstance3D] = []
+var flashes: Array[Node3D] = []
+var flash_light: OmniLight3D
+var gun_smoke: Array[GPUParticles3D] = []
+var enlarge: bool = false                  ## draw larger at range (aircraft other than the player's)
 var damage_smoke: GPUParticles3D
 var damage_fire: GPUParticles3D
 var smoke_material: StandardMaterial3D
@@ -29,8 +42,10 @@ var fire_glow: MeshInstance3D
 var damage_trail: DamageTrail
 var trail_anchor: Vector3 = Vector3.ZERO   ## where the trail leaves the airframe, in its own space
 var fire_level: float = 0.0                ## 0 = no fire, 1 = fully ablaze
-var engine_voice: AudioStreamPlayer3D
+var engine_voices: Array[AudioStreamPlayer3D] = []   ## low-revs loop, high-revs loop
 var gun_voice: AudioStreamPlayer3D
+var voice_rpm: float = 0.85
+var voice_doppler: float = 1.0
 var prop_angle: float = 0.0
 var disc_spin: float = 0.0
 var flash_time: float = 0.0
@@ -90,6 +105,7 @@ func build(spec: Dictionary, team: int, effects: bool = true, voiced: bool = fal
 			muzzles.append(muzzle)
 			if effects:
 				flashes.append(_muzzle_flash(muzzle))
+				gun_smoke.append(_gun_smoke(muzzle))
 		var port: Node3D = model_root.find_child("ExhaustPort_" + tag, true, false)
 		if port != null and effects:
 			exhausts.append(_exhaust_smoke(port))
@@ -100,15 +116,29 @@ func build(spec: Dictionary, team: int, effects: bool = true, voiced: bool = fal
 			var trail: TipTrail = TipTrail.new()
 			add_child(trail)
 			trails.append(trail)
+	if effects and not flashes.is_empty():
+		# The guns light up the wings and nose for an instant.
+		flash_light = OmniLight3D.new()
+		flash_light.light_color = Color(1.0, 0.72, 0.4)
+		flash_light.light_energy = 3.0
+		flash_light.omni_range = 9.0
+		flash_light.shadow_enabled = false
+		flash_light.position = Vector3(0.0, 0.9, (spec.muzzles[0] as Vector3).z - 1.0)
+		flash_light.visible = false
+		add_child(flash_light)
 	if effects:
 		_build_prop_disc(float(spec.prop_radius))
 		_build_damage_effects(float(spec.smoke_z))
 		_build_trail(float(spec.tail_z))
 	if voiced:
 		gun_pitch = float(spec.gun_pitch)
-		engine_voice = _voice(Sfx.looped(String(spec.engine_sound)), 4.0, 55.0, 1, GameSettings.BUS_ENGINE)
-		engine_voice.play()
-		gun_voice = _voice(load(String(spec.gun_sound)), 2.0, 70.0, 6, GameSettings.BUS_EFFECTS)
+		enlarge = true
+		for high: bool in [false, true]:
+			var voice: AudioStreamPlayer3D = _voice(Sfx.engine_loop(spec, high), -60.0, 55.0, 1, GameSettings.BUS_ENGINE)
+			voice.attenuation_filter_cutoff_hz = 4000.0   # distance takes the edge off first
+			voice.play()
+			engine_voices.append(voice)
+		gun_voice = _voice(Sfx.gun_stream(spec), 2.0, 70.0, 6, GameSettings.BUS_EFFECTS)
 
 
 func _offset_in_model(node: Node3D) -> Vector3:
@@ -180,8 +210,34 @@ func animate(model: FlightModel, delta: float) -> void:
 	flash_time = maxf(flash_time - delta, 0.0)
 	for flash in flashes:
 		flash.visible = flash_time > 0.0
-	if engine_voice != null:
-		engine_voice.pitch_scale = clampf(0.72 + model.throttle * 0.28 + (0.14 if model.boosting else 0.0), 0.5, 1.5)
+	if flash_light != null:
+		flash_light.visible = flash_time > 0.0
+	# Hot guns smoke, most just after they stop.
+	for smoke in gun_smoke:
+		smoke.emitting = model.gun_heat > 0.45
+		smoke.amount_ratio = clampf((model.gun_heat - 0.45) / 0.55, 0.15, 1.0)
+	if enlarge:
+		var camera: Camera3D = get_viewport().get_camera_3d()
+		if camera != null:
+			var apparent: float = camera.global_position.distance_to(global_position) / ChaseCamera.magnification(camera.fov)
+			model_root.scale = Vector3.ONE * spot_scale(apparent)
+	if not engine_voices.is_empty():
+		# Two loops crossfaded by RPM, as for the player's own engine, shifted in
+		# pitch by how fast the aircraft closes on or leaves the listener.
+		voice_rpm = lerpf(voice_rpm, Sfx.engine_rpm(model), 1.0 - exp(-delta * 3.0))
+		voice_doppler = lerpf(voice_doppler, Sfx.doppler(model.position, model.velocity(), listener_position, listener_velocity), 1.0 - exp(-delta * 8.0))
+		var layers: PackedFloat32Array = Sfx.engine_layers(voice_rpm)
+		for i in range(2):
+			engine_voices[i].pitch_scale = layers[i * 2] * voice_doppler
+			engine_voices[i].volume_db = 5.5 + linear_to_db(maxf(layers[i * 2 + 1], 0.001))
+
+
+## How much larger than life an aircraft `apparent_distance` metres away is drawn
+## (the distance as it looks: real distance divided by the zoom). Up close it is
+## true to size; beyond SPOT_FROM it grows so that it shrinks on screen only
+## 40% as fast as it should, up to SPOT_MAX. Hits are judged on the true size.
+static func spot_scale(apparent_distance: float) -> float:
+	return clampf(lerpf(1.0, apparent_distance / SPOT_FROM, SPOT_SHARE), 1.0, SPOT_MAX)
 
 
 ## Slow turntable idle for the hangar display.
@@ -193,11 +249,13 @@ func idle(delta: float) -> void:
 
 ## Called for each step in which the guns fired.
 func show_gunfire() -> void:
-	flash_time = 0.05
+	flash_time = FLASH_TIME
 	for flash in flashes:
-		flash.scale = Vector3.ONE * randf_range(0.7, 1.25)
+		# A different tongue of flame every shot.
+		flash.scale = Vector3(randf_range(0.75, 1.2), randf_range(0.75, 1.2), randf_range(0.7, 1.45))
+		flash.rotation.z = randf() * TAU
 	if gun_voice != null:
-		gun_voice.pitch_scale = gun_pitch * randf_range(0.96, 1.04)
+		gun_voice.pitch_scale = gun_pitch
 		gun_voice.play()
 
 
@@ -248,8 +306,8 @@ func clear_trail() -> void:
 
 
 func set_voice_enabled(on: bool) -> void:
-	if engine_voice != null:
-		engine_voice.stream_paused = not on
+	for voice in engine_voices:
+		voice.stream_paused = not on
 
 
 func reset_effects() -> void:
@@ -268,11 +326,25 @@ func reset_effects() -> void:
 	flash_time = 0.0
 	for flash in flashes:
 		flash.visible = false
+	if flash_light != null:
+		flash_light.visible = false
+	for smoke in gun_smoke:
+		smoke.restart()
+		smoke.emitting = false
+	voice_doppler = 1.0
 
 
-func _muzzle_flash(muzzle: Node3D) -> MeshInstance3D:
+## A tongue of flame along the barrel line with a soft glow at its root.
+func _muzzle_flash(muzzle: Node3D) -> Node3D:
+	var flash: Node3D = Node3D.new()
+	flash.visible = false
+	muzzle.add_child(flash)
+	var tongue: MeshInstance3D = MeshInstance3D.new()
+	tongue.mesh = _flame_mesh()
+	tongue.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	flash.add_child(tongue)
 	var quad: QuadMesh = QuadMesh.new()
-	quad.size = Vector2(0.95, 0.95)
+	quad.size = Vector2(0.62, 0.62)
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -280,15 +352,50 @@ func _muzzle_flash(muzzle: Node3D) -> MeshInstance3D:
 	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	mat.billboard_keep_scale = true
 	mat.albedo_texture = _soft_dot()
-	mat.albedo_color = Color(3.2, 2.2, 1.0)
+	mat.albedo_color = Color(3.0, 1.7, 0.6)
 	quad.material = mat
-	var flash: MeshInstance3D = MeshInstance3D.new()
-	flash.mesh = quad
-	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	flash.position = Vector3(0.0, 0.0, -0.45)
-	flash.visible = false
-	muzzle.add_child(flash)
+	var glow: MeshInstance3D = MeshInstance3D.new()
+	glow.mesh = quad
+	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	glow.position = Vector3(0.0, 0.0, -0.3)
+	flash.add_child(glow)
 	return flash
+
+
+## Two crossed quads 1.7 m long, root at the origin and tip toward -Z (the way
+## the guns point), shared by every muzzle.
+static func _flame_mesh() -> ArrayMesh:
+	if flame_mesh != null:
+		return flame_mesh
+	var half: float = 0.32
+	var length: float = 1.7
+	var vertices: PackedVector3Array = PackedVector3Array()
+	var uvs: PackedVector2Array = PackedVector2Array()
+	var indices: PackedInt32Array = PackedInt32Array()
+	for axis: Vector3 in [Vector3.RIGHT, Vector3.UP]:
+		var base: int = vertices.size()
+		vertices.append_array([-axis * half, axis * half, axis * half + Vector3.FORWARD * length, -axis * half + Vector3.FORWARD * length])
+		uvs.append_array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)])
+		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	flame_mesh = ArrayMesh.new()
+	flame_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var material: ShaderMaterial = ShaderMaterial.new()
+	material.shader = load("res://shaders/muzzle_flame.gdshader")
+	flame_mesh.surface_set_material(0, material)
+	return flame_mesh
+
+
+## Thin grey smoke curling off a hot gun, left behind in the airflow.
+func _gun_smoke(muzzle: Node3D) -> GPUParticles3D:
+	var p: GPUParticles3D = _trail_particles(20, 0.4, Color(0.8, 0.8, 0.8, 0.3), Color(0.9, 0.9, 0.9, 0.0), 0.16, 4.0, false)
+	(p.process_material as ParticleProcessMaterial).gravity = Vector3(0, 0.5, 0)
+	muzzle.add_child(p)
+	return p
 
 
 func _build_damage_effects(smoke_z: float) -> void:

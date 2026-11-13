@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://ctpvyvbo206yn"
-path="res://.godot/imported/gun_light.wav-9aedf2f2f92de7e1be87d69c16709e70.sample"
+uid="uid://curr2q6q6gds3"
+path="res://.godot/imported/whizz.wav-cb9a5d1558895a8661f1ee9a459b9aca.sample"
 
 [deps]
 
-source_file="res://assets/audio/gun_light.wav"
-dest_files=["res://.godot/imported/gun_light.wav-9aedf2f2f92de7e1be87d69c16709e70.sample"]
+source_file="res://assets/audio/whizz.wav"
+dest_files=["res://.godot/imported/whizz.wav-cb9a5d1558895a8661f1ee9a459b9aca.sample"]
 
 [params]
 

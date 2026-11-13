@@ -1,8 +1,10 @@
 shader_type spatial;
 // Aircraft skin without textures: bare metal or two-tone camouflage paint with a
 // lighter underside, panel-to-panel tone and roughness changes, thin panel seams,
-// rivet rows, exhaust staining, battle scorching and a hit flash.
-render_mode cull_back;
+// rivet rows, exhaust staining, battle scorching and a hit flash. Haze is not
+// applied to aircraft, so one far up the valley stays a crisp shape rather than
+// fading into the fog behind it.
+render_mode cull_back, fog_disabled;
 
 uniform vec3 base_color : source_color = vec3(0.74, 0.76, 0.78);
 uniform float metallic = 0.92;

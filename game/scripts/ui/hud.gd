@@ -1,9 +1,10 @@
 class_name Hud
 extends Control
-## In-flight interface: steering circle and gun cross near the action, markers
-## and a lead pip on opponents, five health dots on the aircraft in front of the
-## guns, a radar map in the top left, status strip at the bottom, score bar at
-## the top, see-through airframe damage panel on the middle right and, mirroring
+## In-flight interface: steering circle and gun cross near the action with a gun
+## heat arc under the cross, a crisp bracket, name and range on each opponent,
+## five health dots on the aircraft in front of the guns, a radar map in the top
+## left, status strip at the bottom (hull, boost, throttle, gun heat), score bar
+## at the top, see-through airframe damage panel on the middle right and, mirroring
 ## it on the middle left, the same panel for the opponent in the sights. Both show
 ## bullet holes where rounds struck. Everything is drawn in _draw so it stays
 ## crisp at any resolution.
@@ -20,7 +21,9 @@ const ZONE_CRITICAL: Color = Color("ff5a3c")
 const HOSTILE: Color = Color("ff7a4d")
 const FRIEND: Color = Color("fbf4e6")
 const DOT_RED: Color = Color("ff5a4a")
-const LEAD_RANGE: float = 1000.0
+const LEAD_RANGE: float = 1000.0      ## within this, aiming the right distance ahead of an opponent counts as aiming at it
+const OUTLINE: Color = Color(0.04, 0.03, 0.02, 0.6)   ## dark edge under markers and labels, so they read on snow and sky
+const HEAT_SHOWN_FROM: float = 0.25   ## the heat arc by the gun cross appears once the guns are this warm
 const HEALTH_DOTS: int = 5
 const DOTS_FADE_IN: float = 0.15      ## seconds for the health dots to appear
 const DOTS_LINGER: float = 2.0        ## seconds they stay after the guns move off or a hit lands
@@ -256,6 +259,40 @@ func _draw_sights(s: float) -> void:
 			var a: float = clampf(hit_marker / 0.12, 0.0, 1.0)
 			for d: Vector2 in [Vector2(1, 1), Vector2(1, -1), Vector2(-1, 1), Vector2(-1, -1)]:
 				draw_line(n + d * 7.0 * s, n + d * 15.0 * s, Color(WARN, a), 2.4 * s)
+		_draw_gun_heat(n, s)
+
+
+## Colour of the gun heat displays: cream while cool, amber once the rate of
+## fire is dropping, red near the limit and while the guns are stopped.
+func heat_colour() -> Color:
+	if model.gun_overheated or model.gun_heat >= 0.85:
+		return WARN
+	return AMBER if model.gun_heat >= FlightModel.GUN_SLOW_FROM else TEXT
+
+
+## Gun heat where the eyes already are: an arc under the gun cross that fills
+## from left to right as the guns heat up, with a tick where overheated guns
+## come back. It stays out of the way while the guns are cool.
+func _draw_gun_heat(n: Vector2, s: float) -> void:
+	var heat: float = model.gun_heat
+	var show: float = 1.0 if model.gun_overheated else clampf((heat - HEAT_SHOWN_FROM) / 0.1, 0.0, 1.0)
+	if show <= 0.0:
+		return
+	var r: float = 44.0 * s   # outside the aim circle when the two coincide
+	var from: float = deg_to_rad(145.0)   # lower left, sweeping under the cross to the lower right
+	var to: float = deg_to_rad(35.0)
+	var colour: Color = heat_colour()
+	if model.gun_overheated and int(clock * 5.0) % 2 == 0:
+		colour = Color(colour, 0.45)
+	draw_arc(n, r, from, to, 24, Color(0, 0, 0, 0.4 * show), 6.0 * s, true)
+	draw_arc(n, r, from, to, 24, Color(1, 1, 1, 0.16 * show), 3.2 * s, true)
+	draw_arc(n, r, from, lerpf(from, to, clampf(heat, 0.0, 1.0)), 24, Color(colour, colour.a * show), 3.2 * s, true)
+	var resume: Vector2 = Vector2.from_angle(lerpf(from, to, FlightModel.GUN_RESUME))
+	draw_line(n + resume * (r - 5.0 * s), n + resume * (r + 5.0 * s), Color(TEXT, 0.8 * show), 1.4 * s, true)
+	if model.gun_overheated:
+		var at: Vector2 = Vector2(n.x - 120 * s, n.y + r + 22 * s)
+		draw_string_outline(font_bold, at, "GUNS OVERHEATED", HORIZONTAL_ALIGNMENT_CENTER, 240 * s, int(14 * s), int(4 * s), OUTLINE)
+		_text(at, "GUNS OVERHEATED", 14 * s, WARN, true, HORIZONTAL_ALIGNMENT_CENTER, 240 * s)
 
 
 func _draw_damage_flash() -> void:
@@ -269,9 +306,10 @@ func _draw_damage_flash() -> void:
 	draw_polygon([Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(size.x - edge, size.y), Vector2(size.x - edge, 0)], [tint, tint, clear, clear])
 
 
-## Brackets, range and a lead pip on each opponent; an edge arrow when off
-## screen; health dots on the one the guns point at. Friends are drawn in white
-## and get no lead pip.
+## A bracket, name and range on each opponent; an edge arrow when off screen;
+## health dots on the one the guns point at. Friends are drawn in white. Nothing
+## is drawn ahead of an opponent: where it is going is read from the aircraft
+## and its trail.
 func _draw_targets(s: float) -> void:
 	if not model.alive:
 		update_target_panel(null)
@@ -308,34 +346,39 @@ func _draw_target(enemy: Combatant, s: float, gun_cross: Variant, aim_point: Var
 	if screen == null or not inside.has_point(screen):
 		_draw_edge_arrow(where, dist, s, colour)
 		return INF
-	var c: Vector2 = screen
+	var c: Vector2 = Vector2(roundf((screen as Vector2).x), roundf((screen as Vector2).y))
 	var zoom: float = ChaseCamera.magnification(camera.fov)
-	var half: float = clampf(9.0 * size.y * zoom / maxf(dist, 1.0), 13.0 * s, 60.0 * s * maxf(zoom, 1.0))
-	var arm: float = half * 0.42
-	for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-		var p: Vector2 = c + corner * half
-		draw_line(p, p - Vector2(corner.x * arm, 0), colour, 1.8 * s)
-		draw_line(p, p - Vector2(0, corner.y * arm), colour, 1.8 * s)
+	# The bracket hugs the aircraft as drawn, which is larger than life at range.
+	var drawn: float = Aircraft.spot_scale(dist / zoom) if enemy.aircraft != null and enemy.aircraft.enlarge else 1.0
+	var half: float = roundf(clampf(9.0 * size.y * zoom * drawn / maxf(dist, 1.0), 12.0 * s, 60.0 * s * maxf(zoom, 1.0)))
+	var arm: float = roundf(half * 0.42)
+	var edge: float = maxf(roundf(1.6 * s), 1.0)
+	for pass_colour: Color in [OUTLINE, colour]:
+		var w: float = edge + 2.0 * s if pass_colour == OUTLINE else edge
+		var over: float = 1.0 * s if pass_colour == OUTLINE else 0.0   # the dark edge runs a little past each end
+		for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+			var p: Vector2 = c + corner * half
+			draw_line(p + Vector2(corner.x * over, 0), p - Vector2(corner.x * (arm + over), 0), pass_colour, w)
+			draw_line(p + Vector2(0, corner.y * over), p - Vector2(0, corner.y * (arm + over)), pass_colour, w)
 	var tag: String = String(enemy.model.spec.short) if enemy.pilot_name == "" else "%s · %s" % [enemy.pilot_name.to_upper(), String(enemy.model.spec.short)]
-	_text(Vector2(c.x - 140 * s, c.y - half - 8 * s), "%s  %d m" % [tag, int(dist)], 12 * s, colour, true, HORIZONTAL_ALIGNMENT_CENTER, 280 * s)
+	var label: String = "%s  %d m" % [tag, int(dist)]
+	var label_at: Vector2 = Vector2(c.x - 140 * s, c.y - half - 8 * s)
+	draw_string_outline(font_bold, label_at, label, HORIZONTAL_ALIGNMENT_CENTER, 280 * s, int(12 * s), int(3 * s), Color(OUTLINE, 0.5))
+	_text(label_at, label, 12 * s, colour, true, HORIZONTAL_ALIGNMENT_CENTER, 280 * s)
 	var reach: float = maxf(half * 1.25, 28.0 * s)
 	var aimed: float = INF
 	for point: Variant in [gun_cross, aim_point]:
 		if point != null and (point as Vector2).distance_to(c) < reach:
 			aimed = minf(aimed, (point as Vector2).distance_to(c) / reach)
 	if dist < LEAD_RANGE and not friend:
-		# Where to put the gun cross so the rounds and the target meet.
+		# Aiming the right distance ahead of it (where rounds and target meet)
+		# also counts as aiming at it. The spot itself is not drawn.
 		var flight_time: float = dist / BulletField.SPEED
 		var lead: Variant = _project(where + (enemy.model.velocity() - model.velocity()) * flight_time)
 		if lead != null:
-			var l: Vector2 = lead
-			draw_line(c, l, Color(HOSTILE, 0.35), 1.0 * s)
-			draw_arc(l, 7.0 * s, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 3.6 * s)
-			draw_arc(l, 7.0 * s, 0.0, TAU, 20, HOSTILE, 1.8 * s)
-			draw_circle(l, 1.8 * s, HOSTILE)
 			for point: Variant in [gun_cross, aim_point]:
-				if point != null and (point as Vector2).distance_to(l) < 24.0 * s:
-					aimed = minf(aimed, (point as Vector2).distance_to(l) / (24.0 * s))
+				if point != null and (point as Vector2).distance_to(lead) < 24.0 * s:
+					aimed = minf(aimed, (point as Vector2).distance_to(lead) / (24.0 * s))
 	var shown: float = float(dots_shown.get(enemy.id, 0.0))
 	if shown > 0.0:
 		_draw_health_dots(Vector2(c.x, c.y + half + 11.0 * s), health_dots(enemy.model.hull_ratio()), DOT_RED if not friend else FRIEND, shown, s)
@@ -403,18 +446,18 @@ func _draw_top(s: float) -> void:
 		_text(Vector2(0, rect.end.y + 34 * s), message, 20 * s, Color(AMBER, clampf(message_time, 0.0, 1.0)), true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
 
 
-func _bar(pos: Vector2, label: String, value: float, color: Color, s: float, width: float = 150.0) -> float:
+func _bar(pos: Vector2, label: String, value: float, color: Color, s: float, width: float = 150.0, reading: String = "") -> float:
 	_text(pos + Vector2(0, 5 * s), label, 13 * s, DIM, true)
 	var bar: Rect2 = Rect2(pos + Vector2(70 * s, -4 * s), Vector2(width * s, 10 * s))
 	draw_rect(bar, Color(1, 1, 1, 0.12), true)
 	draw_rect(Rect2(bar.position + Vector2(1, 1) * s, Vector2((bar.size.x - 2 * s) * clampf(value, 0, 1), bar.size.y - 2 * s)), color, true)
 	draw_rect(bar, Color(1, 1, 1, 0.5), false, 1.0)
-	_text(bar.position + Vector2(bar.size.x + 10 * s, 10 * s), str(int(round(value * 100))), 17 * s, TEXT, true)
+	_text(bar.position + Vector2(bar.size.x + 10 * s, 10 * s), reading if reading != "" else str(int(round(value * 100))), 17 * s, TEXT if reading == "" else color, true)
 	return 70 * s + bar.size.x + 50 * s
 
 
 func _draw_bottom(s: float) -> void:
-	var w: float = 1060.0 * s
+	var w: float = 1310.0 * s
 	var rect: Rect2 = Rect2(size.x * 0.5 - w * 0.5, size.y - 74 * s, w, 50 * s)
 	_panel(rect)
 	var x: float = rect.position.x + 22 * s
@@ -423,9 +466,17 @@ func _draw_bottom(s: float) -> void:
 	x += _bar(Vector2(x, y), "HULL", hull, TEXT if hull > 0.5 else (ZONE_DAMAGED if hull > 0.25 else ZONE_CRITICAL), s, 150.0)
 	x += _bar(Vector2(x, y), "BOOST", model.boost_energy, AMBER if not model.boosting else Color("ffe4a0"), s, 150.0)
 	x += _bar(Vector2(x, y), "THR", model.throttle, DIM, s, 90.0)
+	var heat_tone: Color = heat_colour()
+	if model.gun_overheated and int(clock * 5.0) % 2 == 0:
+		heat_tone = Color(heat_tone, 0.45)
+	var heat_x: float = x
+	x += _bar(Vector2(x, y), "GUNS", model.gun_heat, heat_tone, s, 110.0, "HOT" if model.gun_overheated else "") + 14 * s
+	# Where overheated guns come back.
+	var tick_x: float = heat_x + 70 * s + 110.0 * s * FlightModel.GUN_RESUME
+	draw_line(Vector2(tick_x, y - 7 * s), Vector2(tick_x, y + 9 * s), Color(TEXT, 0.75), 1.4 * s)
 	var kmh: int = int(round(model.speed * 3.6))
 	var alt: int = int(round(model.position.y))
-	_text(Vector2(x, y + 7 * s), "%d km/h" % kmh, 19 * s, TEXT, true)
+	_text(Vector2(x, y + 7 * s), "%d km/h" % kmh, 19 * s, WARN if model.speed < float(model.spec.stall) * 1.25 else TEXT, true)
 	_text(Vector2(x + 120 * s, y + 7 * s), "ALT %d m" % alt, 19 * s, TEXT, true)
 
 
@@ -542,8 +593,14 @@ func _draw_warnings(s: float) -> void:
 		_text(Vector2(0, size.y * 0.45 + 34 * s), "Respawning…", 17 * s, DIM, false, HORIZONTAL_ALIGNMENT_CENTER, size.x)
 		return
 	var tti: float = model.time_to_impact(terrain, 3.0)
-	if tti < 2.6 and int(clock * 4.0) % 2 == 0:
-		_text(Vector2(0, y), "PULL UP", 26 * s, WARN, true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
+	var blink: bool = int(clock * 4.0) % 2 == 0
+	if tti < 2.6:
+		if blink:
+			_text(Vector2(0, y), "PULL UP", 26 * s, WARN, true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
+			y += 32 * s
+	elif model.near_stall() and blink:
+		# Out of flying speed: the nose is falling and will not come up until the speed does.
+		_text(Vector2(0, y), "STALL — LET THE NOSE DROP", 22 * s, WARN, true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
 		y += 32 * s
 	if input.arena_warning:
 		_text(Vector2(0, y), "LEAVING THE VALLEY — TURN BACK", 17 * s, AMBER, true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
@@ -554,14 +611,15 @@ func _draw_hints(s: float) -> void:
 	var lines: PackedStringArray = [
 		"MOUSE  steer toward the aim circle",
 		"LEFT CLICK / SPACE  fire the guns",
-		"Put the white cross on the red lead ring",
+		"Aim ahead of a turning target; watch your tracers",
+		"Fire in bursts: the guns overheat, then must cool",
 		"SHIFT  boost      W / S  throttle",
 		"A / D  roll      Q / E  rudder",
 		"C  centre aim     Z / WHEEL  zoom for long shots",
 		"ESC  pause & change aircraft",
 		"F4  snow showers on / off (weather test)",
 	]
-	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 324 * s), Vector2(390 * s, 232 * s))
+	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 350 * s), Vector2(410 * s, 258 * s))
 	draw_rect(rect, Color(PANEL, PANEL.a * a), true)
 	draw_rect(rect, Color(EDGE, EDGE.a * a), false, 1.0)
 	for i in range(lines.size()):
