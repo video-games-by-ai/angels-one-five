@@ -23,6 +23,10 @@ var angular_rate: Vector3 = Vector3.ZERO  ## pitch (nose up +), yaw (right +), r
 var controls: Vector3 = Vector3.ZERO      ## smoothed surface deflection -1..1, same axes
 var g_load: float = 1.0
 var alive: bool = true
+var hull: float = 100.0
+var zone_health: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0, 1.0])  ## Airframes.Zone order
+var gun_cooldown: float = 0.0
+var firing: bool = false
 
 
 func setup(id: int, spawn: Vector3, heading: float) -> void:
@@ -37,6 +41,12 @@ func setup(id: int, spawn: Vector3, heading: float) -> void:
 	angular_rate = Vector3.ZERO
 	controls = Vector3.ZERO
 	alive = true
+	hull = float(spec.hull)
+	zone_health = PackedFloat32Array([1.0, 1.0, 1.0, 1.0, 1.0])
+	gun_cooldown = 0.0
+	firing = false
+	g_load = 1.0
+	boosting = false
 
 
 func basis() -> Basis:
@@ -80,7 +90,11 @@ func step(cmd: FlightCommand, dt: float, terrain: TerrainData) -> bool:
 
 	var stall: float = float(spec.stall)
 	var authority: float = clampf((speed - stall * 0.6) / (stall * 1.2), 0.3, 1.0)
-	var target_rate: Vector3 = Vector3(pitch_cmd * float(spec.pitch_rate), yaw_cmd * float(spec.yaw_rate), roll_cmd * float(spec.roll_rate)) * authority
+	# Battle damage: a shot-up tail pitches and yaws sluggishly, holed wings roll slowly.
+	var tail_factor: float = lerpf(0.55, 1.0, zone_health[Airframes.Zone.TAIL])
+	var wing_factor: float = lerpf(0.5, 1.0, minf(zone_health[Airframes.Zone.WING_L], zone_health[Airframes.Zone.WING_R]))
+	var target_rate: Vector3 = Vector3(pitch_cmd * float(spec.pitch_rate) * tail_factor, yaw_cmd * float(spec.yaw_rate) * tail_factor,
+		roll_cmd * float(spec.roll_rate) * wing_factor) * authority
 	angular_rate = angular_rate.lerp(target_rate, 1.0 - exp(-dt * float(spec.response)))
 	controls = controls.lerp(Vector3(pitch_cmd, yaw_cmd, roll_cmd), 1.0 - exp(-dt * 10.0))
 
@@ -102,6 +116,7 @@ func step(cmd: FlightCommand, dt: float, terrain: TerrainData) -> bool:
 	var power: float = throttle
 	if boosting:
 		power = pow(float(spec.boost_speed) / top, 2.0)
+	power *= lerpf(0.5, 1.0, zone_health[Airframes.Zone.ENGINE])  # a damaged engine loses power
 	g_load = 1.0 + absf(angular_rate.x) * speed / GRAVITY
 	var induced: float = maxf(g_load - 1.5, 0.0) * 0.55
 	var accel: float = thrust * power - drag * speed * speed - GRAVITY * fwd.y * 0.75 - induced
@@ -128,6 +143,48 @@ func step(cmd: FlightCommand, dt: float, terrain: TerrainData) -> bool:
 
 func velocity() -> Vector3:
 	return travel_direction * speed
+
+
+func hull_ratio() -> float:
+	return clampf(hull / float(spec.hull), 0.0, 1.0)
+
+
+## Number of rounds leaving the guns this step. The trigger must be held; the
+## first round of a burst goes at once and the rest follow at the fire rate.
+func rounds_this_step(trigger: bool, dt: float) -> int:
+	gun_cooldown = maxf(gun_cooldown - dt, -dt)
+	firing = trigger and alive
+	if not firing:
+		gun_cooldown = maxf(gun_cooldown, 0.0)
+		return 0
+	var rounds: int = 0
+	while gun_cooldown <= 0.0:
+		gun_cooldown += 1.0 / float(spec.fire_rate)
+		rounds += 1
+	return rounds
+
+
+## World position of a gun muzzle (alternating sides) and the direction its
+## rounds leave in, converging on a point ahead of the nose.
+func muzzle(index: int, convergence: float = 380.0) -> Array[Vector3]:
+	var muzzles: Array = spec.muzzles
+	var b: Basis = basis()
+	var origin: Vector3 = position + b * (muzzles[index % muzzles.size()] as Vector3)
+	var target: Vector3 = position - b.z * convergence
+	return [origin, (target - origin).normalized()]
+
+
+## Take a hit in one zone. Returns true if this destroyed the aircraft.
+func apply_damage(amount: float, zone: int) -> bool:
+	if not alive:
+		return false
+	zone_health[zone] = maxf(zone_health[zone] - amount / (float(spec.hull) * Airframes.ZONE_CAPACITY), 0.0)
+	hull -= amount
+	if hull <= 0.0:
+		hull = 0.0
+		alive = false
+		return true
+	return false
 
 
 ## Seconds until ground impact on the current path, or INF.

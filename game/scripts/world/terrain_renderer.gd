@@ -14,7 +14,7 @@ var mask_texture: Texture2D
 
 func build(data: TerrainData, lod_scale: float) -> void:
 	height_texture = ImageTexture.create_from_image(data.height_image())
-	mask_texture = load("res://assets/terrain/alpine_mask.png")
+	mask_texture = load(TerrainData.asset_path(data.id, "mask.png"))
 	material = ShaderMaterial.new()
 	material.shader = load("res://shaders/terrain.gdshader")
 	material.set_shader_parameter("heightmap", height_texture)
@@ -24,6 +24,12 @@ func build(data: TerrainData, lod_scale: float) -> void:
 	material.set_shader_parameter("world_size", data.size)
 	material.set_shader_parameter("samples", float(data.samples))
 	material.set_shader_parameter("water_level", data.water_level)
+	# Optional second mask: gravel beds, brooks, settlements and reed beds.
+	var extra: String = TerrainData.asset_path(data.id, "mask2.png")
+	if ResourceLoader.exists(extra):
+		material.set_shader_parameter("masks2", load(extra))
+		material.set_shader_parameter("extra_layers", 1.0)
+	apply_look(material, data.look)
 
 	var tile_size: float = data.size / TILE_COUNT
 	var meshes: Array[ArrayMesh] = []
@@ -47,6 +53,18 @@ func build(data: TerrainData, lod_scale: float) -> void:
 				tile.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if lod < 2 else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				tile.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 				add_child(tile)
+
+
+## Hand a map's look (snow line, colours, ...) to a shader. Keys are uniform names;
+## three-number arrays are colours.
+static func apply_look(target: ShaderMaterial, look: Dictionary) -> void:
+	for key: String in look:
+		if key.begins_with("water_"):
+			continue   # the lake's colours, set on the water material
+		var value: Variant = look[key]
+		if value is Array:
+			value = Color(value[0], value[1], value[2])
+		target.set_shader_parameter(key, value)
 
 
 static func _noise_texture(seed_value: int, frequency: float, normal_map: bool) -> NoiseTexture2D:

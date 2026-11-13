@@ -1,7 +1,9 @@
 class_name Aircraft
 extends Node3D
-## Visual aircraft: imported Blender model, metal skin, moving control surfaces,
-## propeller blur, exhaust smoke, boost flames and wingtip vapour trails.
+## Visual aircraft: imported Blender model, painted or bare-metal skin, moving
+## control surfaces, propeller blur, exhaust smoke, boost flames, wingtip vapour
+## trails, muzzle flashes, battle-damage smoke and (for other aircraft) its own
+## engine and gun sounds in the world.
 
 const TEAM_COLORS: Array[Color] = [Color("f2b33d"), Color("4db4f0"), Color("ff7a3d")]
 const SURFACE_DEFLECTION: float = deg_to_rad(20.0)
@@ -17,17 +19,31 @@ var exhausts: Array[GPUParticles3D] = []
 var flames: Array[GPUParticles3D] = []
 var trails: Array[TipTrail] = []
 var tips: Array[Node3D] = []
+var flashes: Array[MeshInstance3D] = []
+var damage_smoke: GPUParticles3D
+var damage_fire: GPUParticles3D
+var engine_voice: AudioStreamPlayer3D
+var gun_voice: AudioStreamPlayer3D
 var prop_angle: float = 0.0
 var disc_spin: float = 0.0
+var flash_time: float = 0.0
+var gun_pitch: float = 1.0
 
 
-func build(spec: Dictionary, team: int) -> void:
+## `effects` adds particles, trails and flashes (off for the hangar display);
+## `voiced` gives the aircraft its own engine and gun sounds in the world, for
+## aircraft other than the player's.
+func build(spec: Dictionary, team: int, effects: bool = true, voiced: bool = false) -> void:
 	var scene: PackedScene = load(String(spec.model))
 	model_root = scene.instantiate()
 	add_child(model_root)
 	skin_material = ShaderMaterial.new()
 	skin_material.shader = load("res://shaders/aircraft_skin.gdshader")
-	var frame_material: ShaderMaterial = skin_material.duplicate()
+	var paint: Dictionary = spec.paint
+	for key: String in paint:
+		skin_material.set_shader_parameter(key, paint[key])
+	var frame_material: ShaderMaterial = ShaderMaterial.new()
+	frame_material.shader = skin_material.shader
 	frame_material.set_shader_parameter("base_color", Color(0.45, 0.47, 0.49))
 	frame_material.set_shader_parameter("seam_strength", 0.0)
 	var accent: StandardMaterial3D = StandardMaterial3D.new()
@@ -54,6 +70,8 @@ func build(spec: Dictionary, team: int) -> void:
 				mesh_instance.set_surface_override_material(i, insignia)
 		if mesh_instance.name.begins_with("Roundel"):
 			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		# Keeps the paint pattern continuous across parts that have their own origin.
+		mesh_instance.set_instance_shader_parameter("part_offset", _offset_in_model(mesh_instance))
 	propeller = model_root.find_child("Propeller", true, false)
 	for part in ["Aileron_L", "Aileron_R", "Elevator_L", "Elevator_R", "Rudder"]:
 		var n: Node3D = model_root.find_child(part, true, false)
@@ -63,26 +81,56 @@ func build(spec: Dictionary, team: int) -> void:
 		var muzzle: Node3D = model_root.find_child("Muzzle_" + tag, true, false)
 		if muzzle != null:
 			muzzles.append(muzzle)
+			if effects:
+				flashes.append(_muzzle_flash(muzzle))
 		var port: Node3D = model_root.find_child("ExhaustPort_" + tag, true, false)
-		if port != null:
+		if port != null and effects:
 			exhausts.append(_exhaust_smoke(port))
 			flames.append(_boost_flame(port))
 		var tip: Node3D = model_root.find_child("WingTip_" + tag, true, false)
-		if tip != null:
+		if tip != null and effects:
 			tips.append(tip)
 			var trail: TipTrail = TipTrail.new()
 			add_child(trail)
 			trails.append(trail)
-	_build_prop_disc()
+	if effects:
+		_build_prop_disc(float(spec.prop_radius))
+		_build_damage_effects(float(spec.smoke_z))
+	if voiced:
+		gun_pitch = float(spec.gun_pitch)
+		engine_voice = _voice(Sfx.looped(String(spec.engine_sound)), 4.0, 55.0, 1)
+		engine_voice.play()
+		gun_voice = _voice(load(String(spec.gun_sound)), 2.0, 70.0, 6)
 
 
-func _build_prop_disc() -> void:
+func _offset_in_model(node: Node3D) -> Vector3:
+	var t: Transform3D = Transform3D.IDENTITY
+	var n: Node = node
+	while n != null and n != model_root:
+		t = (n as Node3D).transform * t
+		n = n.get_parent()
+	return t.origin
+
+
+func _voice(stream: AudioStream, volume_db: float, unit_size: float, polyphony: int) -> AudioStreamPlayer3D:
+	var player: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+	player.stream = stream
+	player.volume_db = volume_db
+	player.unit_size = unit_size
+	player.max_distance = 3200.0
+	player.max_polyphony = polyphony
+	player.attenuation_filter_cutoff_hz = 9000.0
+	add_child(player)
+	return player
+
+
+func _build_prop_disc(radius: float) -> void:
 	if propeller == null:
 		return
 	prop_material = ShaderMaterial.new()
 	prop_material.shader = load("res://shaders/prop_disc.gdshader")
 	var quad: QuadMesh = QuadMesh.new()
-	quad.size = Vector2(3.45, 3.45)
+	quad.size = Vector2(radius * 2.0 + 0.05, radius * 2.0 + 0.05)
 	prop_disc = MeshInstance3D.new()
 	prop_disc.mesh = quad
 	prop_disc.material_override = prop_material
@@ -98,7 +146,8 @@ func animate(model: FlightModel, delta: float) -> void:
 	disc_spin += delta * 40.0 * rpm_ratio
 	if propeller != null:
 		propeller.rotation.z = -prop_angle
-		prop_material.set_shader_parameter("spin", disc_spin)
+		if prop_material != null:
+			prop_material.set_shader_parameter("spin", disc_spin)
 	var c: Vector3 = model.controls
 	if surfaces.has("Aileron_R"):
 		(surfaces["Aileron_R"] as Node3D).rotation.x = -c.z * SURFACE_DEFLECTION
@@ -113,13 +162,50 @@ func animate(model: FlightModel, delta: float) -> void:
 		flame.emitting = model.boosting
 	for smoke in exhausts:
 		smoke.amount_ratio = 0.55 + model.throttle * 0.45
-	var vapour: float = clampf((model.g_load - 2.6) / 3.0, 0.0, 1.0) + clampf((model.speed - 175.0) / 30.0, 0.0, 0.5)
+	var vapour: float = TipTrail.vapour_strength(model.g_load, model.speed, float(model.spec.top_speed), float(model.spec.boost_speed))
 	for i in range(trails.size()):
 		trails[i].push(tips[i].get_global_transform_interpolated().origin, vapour, delta)
+	flash_time = maxf(flash_time - delta, 0.0)
+	for flash in flashes:
+		flash.visible = flash_time > 0.0
+	if engine_voice != null:
+		engine_voice.pitch_scale = clampf(0.72 + model.throttle * 0.28 + (0.14 if model.boosting else 0.0), 0.5, 1.5)
+
+
+## Slow turntable idle for the hangar display.
+func idle(delta: float) -> void:
+	prop_angle = wrapf(prop_angle + delta * 1.6, 0.0, TAU)
+	if propeller != null:
+		propeller.rotation.z = -prop_angle
+
+
+## Called for each step in which the guns fired.
+func show_gunfire() -> void:
+	flash_time = 0.05
+	for flash in flashes:
+		flash.scale = Vector3.ONE * randf_range(0.7, 1.25)
+	if gun_voice != null:
+		gun_voice.pitch_scale = gun_pitch * randf_range(0.96, 1.04)
+		gun_voice.play()
 
 
 func set_hit_flash(amount: float) -> void:
 	skin_material.set_shader_parameter("hit_flash", amount)
+
+
+## Smoke and then fire from the engine as the hull is shot away (1 = intact).
+func set_damage(hull_ratio: float) -> void:
+	if damage_smoke == null:
+		return
+	damage_smoke.emitting = hull_ratio < 0.62
+	damage_smoke.amount_ratio = clampf(1.15 - hull_ratio * 1.5, 0.2, 1.0)
+	damage_fire.emitting = hull_ratio < 0.28
+	skin_material.set_shader_parameter("scorch", clampf((0.6 - hull_ratio) * 0.9, 0.0, 0.45))
+
+
+func set_voice_enabled(on: bool) -> void:
+	if engine_voice != null:
+		engine_voice.stream_paused = not on
 
 
 func reset_effects() -> void:
@@ -127,6 +213,91 @@ func reset_effects() -> void:
 		trail.clear()
 	for smoke in exhausts:
 		smoke.restart()
+	if damage_smoke != null:
+		damage_smoke.restart()
+		damage_smoke.emitting = false
+		damage_fire.emitting = false
+	flash_time = 0.0
+	for flash in flashes:
+		flash.visible = false
+
+
+func _muzzle_flash(muzzle: Node3D) -> MeshInstance3D:
+	var quad: QuadMesh = QuadMesh.new()
+	quad.size = Vector2(0.95, 0.95)
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.billboard_keep_scale = true
+	mat.albedo_texture = _soft_dot()
+	mat.albedo_color = Color(3.2, 2.2, 1.0)
+	quad.material = mat
+	var flash: MeshInstance3D = MeshInstance3D.new()
+	flash.mesh = quad
+	flash.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	flash.position = Vector3(0.0, 0.0, -0.45)
+	flash.visible = false
+	muzzle.add_child(flash)
+	return flash
+
+
+func _build_damage_effects(smoke_z: float) -> void:
+	damage_smoke = _trail_particles(70, 2.6, Color(0.10, 0.09, 0.09, 0.7), Color(0.32, 0.31, 0.31, 0.0), 0.9, 6.5, false)
+	damage_smoke.position = Vector3(0.0, 0.1, smoke_z)
+	add_child(damage_smoke)
+	damage_fire = _trail_particles(36, 0.28, Color(1.0, 0.72, 0.32, 0.9), Color(0.9, 0.22, 0.04, 0.0), 0.32, 2.4, true)
+	damage_fire.position = Vector3(0.0, 0.1, smoke_z)
+	add_child(damage_fire)
+
+
+## World-space particles left behind along the flight path.
+func _trail_particles(amount: int, life: float, start: Color, end: Color, size_from: float, grow: float, additive: bool) -> GPUParticles3D:
+	var p: GPUParticles3D = GPUParticles3D.new()
+	p.amount = amount
+	p.lifetime = life
+	p.local_coords = false
+	p.emitting = false
+	p.visibility_aabb = AABB(Vector3(-400, -400, -400), Vector3(800, 800, 800))
+	var process: ParticleProcessMaterial = ParticleProcessMaterial.new()
+	process.direction = Vector3(0, 0.2, 1)
+	process.spread = 25.0
+	process.initial_velocity_min = 1.0
+	process.initial_velocity_max = 4.0
+	process.gravity = Vector3(0, 1.2, 0)
+	process.scale_min = size_from
+	process.scale_max = size_from * 1.5
+	var scale_curve: Curve = Curve.new()
+	scale_curve.max_value = grow
+	scale_curve.add_point(Vector2(0, 1.0))
+	scale_curve.add_point(Vector2(1, grow))
+	var scale_tex: CurveTexture = CurveTexture.new()
+	scale_tex.curve = scale_curve
+	process.scale_curve = scale_tex
+	var ramp: Gradient = Gradient.new()
+	ramp.set_color(0, start)
+	ramp.set_color(1, end)
+	var ramp_tex: GradientTexture1D = GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	process.color_ramp = ramp_tex
+	p.process_material = process
+	var quad: QuadMesh = QuadMesh.new()
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = _soft_dot()
+	if additive:
+		mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.albedo_color = Color(1.7, 1.1, 0.6)
+	else:
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_VERTEX
+	quad.material = mat
+	p.draw_pass_1 = quad
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return p
 
 
 static func _soft_dot() -> GradientTexture2D:

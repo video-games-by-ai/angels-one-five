@@ -1,8 +1,9 @@
 class_name Hud
 extends Control
-## In-flight interface: gunsight and nose marker near the action, status strip at
-## the bottom, match bar at the top, see-through airframe damage panel on the
-## middle right. Everything is drawn in _draw so it stays crisp at any resolution.
+## In-flight interface: steering circle and gun cross near the action, markers
+## and a lead pip on opponents, status strip at the bottom, score bar at the top,
+## see-through airframe damage panel on the middle right. Everything is drawn in
+## _draw so it stays crisp at any resolution.
 
 const TEXT: Color = Color("fbf4e6")
 const DIM: Color = Color("e6d8bf")
@@ -13,7 +14,8 @@ const WARN: Color = Color("ff6a3c")
 const ZONE_OK: Color = Color(1, 1, 1, 0.14)
 const ZONE_DAMAGED: Color = Color("f5b942")
 const ZONE_CRITICAL: Color = Color("ff5a3c")
-const ZONE_NAMES: PackedStringArray = ["ENG", "BODY", "L WING", "R WING", "TAIL"]
+const HOSTILE: Color = Color("ff7a4d")
+const LEAD_RANGE: float = 1000.0
 
 var font: Font
 var font_bold: Font
@@ -21,13 +23,21 @@ var model: FlightModel
 var camera: Camera3D
 var terrain: TerrainData
 var input: PlayerInput
+var player: Combatant
+var opponents: Array[Combatant] = []
 var aircraft_name: String = ""
-var mode_label: String = "FREE FLIGHT"
+var mode_label: String = "PRACTICE DOGFIGHT"
+var airframe_id: int = -1
+var outline_extent: Vector3 = Vector3.ZERO
+var hit_marker: float = 0.0       ## flashes when one of our rounds lands
+var damage_flash: float = 0.0     ## flashes when we are hit
+var message: String = ""
+var message_time: float = 0.0
+var lost_reason: String = "AIRCRAFT LOST"
 var clock: float = 0.0
 var show_fps: bool = false
 var hint_time: float = 14.0
 var crash_time: float = 0.0
-var zone_health: PackedFloat32Array = PackedFloat32Array([1, 1, 1, 1, 1])
 var zone_polygons: Array[PackedVector2Array] = []
 var ui_scale: float = 1.0
 
@@ -37,12 +47,36 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	font = load("res://assets/fonts/Montserrat-Regular.otf")
 	font_bold = load("res://assets/fonts/Montserrat-SemiBold.otf")
-	zone_polygons = AirframeOutline.zones()
+
+
+## Point the HUD at the player's aircraft for a new sortie.
+func attach(pilot: Combatant, enemies: Array[Combatant]) -> void:
+	player = pilot
+	model = pilot.model
+	opponents = enemies
+	airframe_id = pilot.frame_id
+	aircraft_name = String(model.spec.name)
+	zone_polygons = AirframeOutline.zones(airframe_id)
+	outline_extent = AirframeOutline.extent(airframe_id)
+	clock = 0.0
+	hint_time = 16.0
+	crash_time = 0.0
+	hit_marker = 0.0
+	damage_flash = 0.0
+	message_time = 0.0
+
+
+func announce(text: String) -> void:
+	message = text
+	message_time = 3.5
 
 
 func _process(delta: float) -> void:
 	clock += delta
 	hint_time = maxf(hint_time - delta, 0.0)
+	hit_marker = maxf(hit_marker - delta, 0.0)
+	damage_flash = maxf(damage_flash - delta * 1.8, 0.0)
+	message_time = maxf(message_time - delta, 0.0)
 	ui_scale = clampf(size.y / 1080.0, 0.7, 2.0)
 	queue_redraw()
 
@@ -51,6 +85,9 @@ func _draw() -> void:
 	if model == null or camera == null:
 		return
 	var s: float = ui_scale
+	if damage_flash > 0.0:
+		_draw_damage_flash()
+	_draw_targets(s)
 	_draw_sights(s)
 	_draw_top(s)
 	_draw_bottom(s)
@@ -101,16 +138,91 @@ func _draw_sights(s: float) -> void:
 			draw_line(n + Vector2(w * 0.6, 0), n + Vector2(w * 1.8, 0), col, t)
 			draw_line(n + Vector2(0, -w * 0.6), n + Vector2(0, -w * 1.2), col, t)
 		draw_circle(n, 2.0 * s, TEXT)
+		if hit_marker > 0.0:
+			# Hit confirmation: a brief X on the gun cross.
+			var a: float = clampf(hit_marker / 0.12, 0.0, 1.0)
+			for d: Vector2 in [Vector2(1, 1), Vector2(1, -1), Vector2(-1, 1), Vector2(-1, -1)]:
+				draw_line(n + d * 7.0 * s, n + d * 15.0 * s, Color(WARN, a), 2.4 * s)
+
+
+func _draw_damage_flash() -> void:
+	var a: float = clampf(damage_flash, 0.0, 1.0) * 0.5
+	var edge: float = size.y * 0.16
+	var clear: Color = Color(WARN, 0.0)
+	var tint: Color = Color(WARN, a)
+	draw_polygon([Vector2.ZERO, Vector2(size.x, 0), Vector2(size.x, edge), Vector2(0, edge)], [tint, tint, clear, clear])
+	draw_polygon([Vector2(0, size.y), Vector2(size.x, size.y), Vector2(size.x, size.y - edge), Vector2(0, size.y - edge)], [tint, tint, clear, clear])
+	draw_polygon([Vector2.ZERO, Vector2(0, size.y), Vector2(edge, size.y), Vector2(edge, 0)], [tint, tint, clear, clear])
+	draw_polygon([Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(size.x - edge, size.y), Vector2(size.x - edge, 0)], [tint, tint, clear, clear])
+
+
+## Brackets, range and a lead pip on each opponent; an edge arrow when off screen.
+func _draw_targets(s: float) -> void:
+	if not model.alive:
+		return
+	for enemy in opponents:
+		if not enemy.model.alive:
+			continue
+		var where: Vector3 = enemy.model.position
+		if enemy.aircraft != null:
+			where = enemy.aircraft.get_global_transform_interpolated().origin
+		var dist: float = where.distance_to(model.position)
+		var screen: Variant = _project(where)
+		var margin: float = 46.0 * s
+		var inside: Rect2 = Rect2(Vector2(margin, margin), size - Vector2(margin, margin) * 2.0)
+		if screen == null or not inside.has_point(screen):
+			_draw_edge_arrow(where, dist, s)
+			continue
+		var c: Vector2 = screen
+		var half: float = clampf(9.0 * size.y / maxf(dist, 1.0), 13.0 * s, 60.0 * s)
+		var arm: float = half * 0.42
+		for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+			var p: Vector2 = c + corner * half
+			draw_line(p, p - Vector2(corner.x * arm, 0), HOSTILE, 1.8 * s)
+			draw_line(p, p - Vector2(0, corner.y * arm), HOSTILE, 1.8 * s)
+		_text(Vector2(c.x - 100 * s, c.y - half - 8 * s), "%s  %d m" % [String(enemy.model.spec.short), int(dist)], 12 * s, HOSTILE, true, HORIZONTAL_ALIGNMENT_CENTER, 200 * s)
+		var bar: Rect2 = Rect2(c + Vector2(-half, half + 5 * s), Vector2(half * 2.0, 3.5 * s))
+		draw_rect(bar, Color(0, 0, 0, 0.45), true)
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * enemy.model.hull_ratio(), bar.size.y)), HOSTILE, true)
+		if dist < LEAD_RANGE:
+			# Where to put the gun cross so the rounds and the target meet.
+			var flight_time: float = dist / BulletField.SPEED
+			var lead: Variant = _project(where + (enemy.model.velocity() - model.velocity()) * flight_time)
+			if lead != null:
+				var l: Vector2 = lead
+				draw_line(c, l, Color(HOSTILE, 0.35), 1.0 * s)
+				draw_arc(l, 7.0 * s, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 3.6 * s)
+				draw_arc(l, 7.0 * s, 0.0, TAU, 20, HOSTILE, 1.8 * s)
+				draw_circle(l, 1.8 * s, HOSTILE)
+
+
+func _draw_edge_arrow(where: Vector3, dist: float, s: float) -> void:
+	var local: Vector3 = camera.global_transform.affine_inverse() * where
+	var dir: Vector2 = Vector2(local.x, -local.y)
+	if dir.length_squared() < 0.0001:
+		dir = Vector2.DOWN
+	dir = dir.normalized()
+	var half: Vector2 = size * 0.5 - Vector2(70, 70) * s
+	var reach: float = minf(half.x / maxf(absf(dir.x), 0.001), half.y / maxf(absf(dir.y), 0.001))
+	var tip: Vector2 = size * 0.5 + dir * reach
+	var side: Vector2 = dir.orthogonal()
+	draw_colored_polygon([tip + dir * 13.0 * s, tip - dir * 9.0 * s + side * 10.0 * s, tip - dir * 9.0 * s - side * 10.0 * s], HOSTILE)
+	_text(tip - dir * 30.0 * s + Vector2(-50 * s, 5 * s), "%d m" % int(dist), 12 * s, HOSTILE, true, HORIZONTAL_ALIGNMENT_CENTER, 100 * s)
 
 
 func _draw_top(s: float) -> void:
-	var w: float = 360.0 * s
+	var w: float = 420.0 * s
 	var rect: Rect2 = Rect2(size.x * 0.5 - w * 0.5, 18 * s, w, 56 * s)
 	_panel(rect)
 	_text(Vector2(rect.position.x, rect.position.y + 24 * s), mode_label, 15 * s, DIM, true, HORIZONTAL_ALIGNMENT_CENTER, w)
 	var minutes: int = int(clock) / 60
 	var seconds: int = int(clock) % 60
 	_text(Vector2(rect.position.x, rect.position.y + 47 * s), "%02d:%02d" % [minutes, seconds], 19 * s, TEXT, true, HORIZONTAL_ALIGNMENT_CENTER, w)
+	if player != null:
+		_text(Vector2(rect.position.x + 18 * s, rect.position.y + 47 * s), "KILLS %d" % player.kills, 16 * s, AMBER, true)
+		_text(Vector2(rect.position.x, rect.position.y + 47 * s), "LOST %d" % player.losses, 16 * s, DIM, true, HORIZONTAL_ALIGNMENT_RIGHT, w - 18 * s)
+	if message_time > 0.0:
+		_text(Vector2(0, rect.end.y + 34 * s), message, 20 * s, Color(AMBER, clampf(message_time, 0.0, 1.0)), true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
 
 
 func _bar(pos: Vector2, label: String, value: float, color: Color, s: float, width: float = 150.0) -> float:
@@ -129,8 +241,8 @@ func _draw_bottom(s: float) -> void:
 	_panel(rect)
 	var x: float = rect.position.x + 22 * s
 	var y: float = rect.position.y + 29 * s
-	var hull: float = (zone_health[0] + zone_health[1] + zone_health[2] + zone_health[3] + zone_health[4]) / 5.0
-	x += _bar(Vector2(x, y), "HULL", hull, TEXT if hull > 0.5 else ZONE_DAMAGED, s, 150.0)
+	var hull: float = model.hull_ratio()
+	x += _bar(Vector2(x, y), "HULL", hull, TEXT if hull > 0.5 else (ZONE_DAMAGED if hull > 0.25 else ZONE_CRITICAL), s, 150.0)
 	x += _bar(Vector2(x, y), "BOOST", model.boost_energy, AMBER if not model.boosting else Color("ffe4a0"), s, 150.0)
 	x += _bar(Vector2(x, y), "THR", model.throttle, DIM, s, 90.0)
 	var kmh: int = int(round(model.speed * 3.6))
@@ -145,14 +257,16 @@ func _draw_airframe(s: float) -> void:
 	var rect: Rect2 = Rect2(size.x - w - 24 * s, size.y * 0.5 - h * 0.5 - 30 * s, w, h)
 	_panel(rect)
 	_text(rect.position + Vector2(14 * s, 24 * s), "AIRFRAME", 13 * s, DIM, true)
-	_text(rect.position + Vector2(0, 24 * s), aircraft_name.to_upper(), 12 * s, DIM, false, HORIZONTAL_ALIGNMENT_RIGHT, w - 14 * s)
-	var origin: Vector2 = rect.position + Vector2(w * 0.5, 40 * s + 92 * s)
-	var scale_px: float = 17.0 * s
+	_text(rect.position + Vector2(0, 24 * s), String(model.spec.short), 12 * s, DIM, false, HORIZONTAL_ALIGNMENT_RIGHT, w - 14 * s)
+	# Fit this aircraft's planform into the panel, whatever its size.
+	var room: Vector2 = Vector2(w - 28 * s, h - 78 * s)
+	var scale_px: float = minf(room.x / (outline_extent.z * 2.0), room.y / (outline_extent.y - outline_extent.x))
+	var origin: Vector2 = rect.position + Vector2(w * 0.5, 36 * s + room.y * 0.5 - (outline_extent.x + outline_extent.y) * 0.5 * scale_px)
 	for i in range(zone_polygons.size()):
 		var poly: PackedVector2Array = PackedVector2Array()
 		for p in zone_polygons[i]:
 			poly.append(origin + p * scale_px)
-		var health: float = zone_health[i]
+		var health: float = model.zone_health[i]
 		var fill: Color = ZONE_OK if health > 0.7 else (ZONE_DAMAGED if health > 0.3 else ZONE_CRITICAL)
 		if health <= 0.7:
 			fill.a = 0.85
@@ -177,7 +291,7 @@ func _draw_warnings(s: float) -> void:
 	if not model.alive:
 		var t: float = clampf(crash_time * 2.0, 0.0, 1.0)
 		draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.04, 0.03, 0.35 * t), true)
-		_text(Vector2(0, size.y * 0.45), "AIRCRAFT LOST", 30 * s, TEXT, true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
+		_text(Vector2(0, size.y * 0.45), lost_reason, 30 * s, TEXT, true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
 		_text(Vector2(0, size.y * 0.45 + 34 * s), "Respawning…", 17 * s, DIM, false, HORIZONTAL_ALIGNMENT_CENTER, size.x)
 		return
 	var tti: float = model.time_to_impact(terrain, 3.0)
@@ -192,11 +306,14 @@ func _draw_hints(s: float) -> void:
 	var a: float = clampf(hint_time / 2.0, 0.0, 1.0)
 	var lines: PackedStringArray = [
 		"MOUSE  steer toward the aim circle",
+		"LEFT CLICK / SPACE  fire the guns",
+		"Put the white cross on the red lead ring",
 		"SHIFT  boost      W / S  throttle",
 		"A / D  roll      Q / E  rudder",
-		"C  centre aim     ESC  pause & settings",
+		"C  centre aim     ESC  pause & change aircraft",
+		"F4  snow showers on / off (weather test)",
 	]
-	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 220 * s), Vector2(340 * s, 128 * s))
+	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 298 * s), Vector2(390 * s, 206 * s))
 	draw_rect(rect, Color(PANEL, PANEL.a * a), true)
 	draw_rect(rect, Color(EDGE, EDGE.a * a), false, 1.0)
 	for i in range(lines.size()):

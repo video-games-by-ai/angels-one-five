@@ -197,16 +197,16 @@ def normals_and_slope(h: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray
     return gx, gz, ny
 
 
-def sun_visibility(h: np.ndarray) -> np.ndarray:
+def sun_visibility(h: np.ndarray, azimuth: float = SUN_AZIMUTH, elevation: float = SUN_ELEVATION) -> np.ndarray:
     """Soft mountain shadows: march each texel toward the sun over a half-res grid."""
     t0 = time.time()
     hs = h[::2, ::2].astype(np.float64)
     n = hs.shape[0]
     step = SIZE / (N - 1) * 2
     # Direction toward the sun in grid units: x grows east (+X), rows grow south (+Z).
-    dx = math.sin(SUN_AZIMUTH)
-    dz = -math.cos(SUN_AZIMUTH)
-    tan_e = math.tan(SUN_ELEVATION)
+    dx = math.sin(azimuth)
+    dz = -math.cos(azimuth)
+    tan_e = math.tan(elevation)
     rows, cols = np.mgrid[0:n, 0:n].astype(np.float64)
     horizon = np.full(hs.shape, -1.0)
     dist = step
@@ -228,9 +228,8 @@ def sun_visibility(h: np.ndarray) -> np.ndarray:
     return vis.astype(np.float32)
 
 
-def place_trees(h, X, Z, forest, ny, rng) -> np.ndarray:
+def place_trees(h, X, Z, forest, ny, rng, spacing: float = 30.0, small_above: float = 1500.0) -> np.ndarray:
     """Jittered-grid conifer placement following the forest mask."""
-    spacing = 30.0
     coords = np.arange(-SIZE / 2 + 600, SIZE / 2 - 600, spacing)
     gx, gz = np.meshgrid(coords, coords)
     gx = gx + rng.uniform(-spacing * 0.45, spacing * 0.45, gx.shape)
@@ -245,7 +244,7 @@ def place_trees(h, X, Z, forest, ny, rng) -> np.ndarray:
     xs, zs = gx[keep], gz[keep]
     ys = h[fj[keep], fi[keep]]
     count = xs.size
-    scale = rng.uniform(0.75, 1.35, count) * np.where(ys > 1500, 0.8, 1.0)
+    scale = rng.uniform(0.75, 1.35, count) * np.where(ys > small_above, 0.8, 1.0)
     yaw = rng.uniform(0, math.tau, count)
     kind = (rng.random(count) < 0.35).astype(np.float32)  # 0 spruce, 1 fir
     recs = np.stack([xs, ys - 0.6, zs, scale, yaw, kind], axis=1).astype(np.float32)

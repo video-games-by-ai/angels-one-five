@@ -1,11 +1,17 @@
 shader_type spatial;
-// Natural-metal skin without textures: panel-to-panel tone and roughness changes,
-// thin panel seams, rivet rows, exhaust staining and a hit flash.
+// Aircraft skin without textures: bare metal or two-tone camouflage paint with a
+// lighter underside, panel-to-panel tone and roughness changes, thin panel seams,
+// rivet rows, exhaust staining, battle scorching and a hit flash.
 render_mode cull_back;
 
 uniform vec3 base_color : source_color = vec3(0.74, 0.76, 0.78);
 uniform float metallic = 0.92;
 uniform float roughness = 0.30;
+uniform vec3 paint_b : source_color = vec3(0.74, 0.76, 0.78);
+uniform float camo = 0.0;
+uniform vec3 underside_color : source_color = vec3(0.74, 0.76, 0.78);
+uniform float underside = 0.0;
+instance uniform vec3 part_offset = vec3(0.0);
 uniform float seam_strength = 0.3;
 uniform float stain_strength = 1.0;
 uniform float hit_flash = 0.0;
@@ -20,6 +26,17 @@ float hash(vec3 p) {
 	return fract((p.x + p.y) * p.z);
 }
 
+float value_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = hash(vec3(i, 7.0));
+	float b = hash(vec3(i + vec2(1.0, 0.0), 7.0));
+	float c = hash(vec3(i + vec2(0.0, 1.0), 7.0));
+	float d = hash(vec3(i + vec2(1.0, 1.0), 7.0));
+	return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
 float seam(float coord, float size) {
 	float d = abs(fract(coord / size + 0.5) - 0.5) * size;
 	float w = fwidth(coord) * 0.75 + 0.0035;
@@ -27,7 +44,7 @@ float seam(float coord, float size) {
 }
 
 void vertex() {
-	obj_pos = VERTEX;
+	obj_pos = VERTEX + part_offset;
 	obj_normal = NORMAL;
 }
 
@@ -48,7 +65,12 @@ void fragment() {
 	float rivet_row = seam(p.z + 0.035, cell_size.z) * (0.5 + 0.5 * sin(p.x * 260.0 + p.y * 260.0));
 	float rivets = smoothstep(0.6, 1.0, rivet_row) * 0.25;
 
-	vec3 col = base_color * (0.95 + 0.08 * tone);
+	// Disruptive camouflage: broad soft-edged bands swept across the airframe.
+	vec2 q = vec2(p.x * 0.42 + p.z * 0.16, p.z * 0.36 - p.x * 0.12);
+	float blobs = value_noise(q) * 0.65 + value_noise(q * 2.3 + 11.0) * 0.35;
+	vec3 paint = mix(base_color, paint_b, smoothstep(0.47, 0.53, blobs) * camo);
+	paint = mix(paint, underside_color, (1.0 - smoothstep(-0.55, -0.25, normalize(obj_normal).y)) * underside);
+	vec3 col = paint * (0.95 + 0.08 * tone);
 	col *= 1.0 - lines * seam_strength * 0.45 - rivets * 0.2;
 
 	// Exhaust staining streaming back along the fuselage sides.

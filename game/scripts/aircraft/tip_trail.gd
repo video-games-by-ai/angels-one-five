@@ -4,7 +4,7 @@ extends MeshInstance3D
 
 const LIFETIME: float = 1.3
 const MAX_POINTS: int = 70
-const WIDTH: float = 0.28
+const WIDTH: float = 0.2
 
 var points: Array[Vector3] = []
 var ages: PackedFloat32Array = PackedFloat32Array()
@@ -25,6 +25,16 @@ func _ready() -> void:
 	mat.no_depth_test = false
 	material_override = mat
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
+
+## Ribbon strength for the current flight state. Hard pulls give the full
+## ribbon; speed adds a thinner one that starts at 90% of the airframe's own
+## top speed and peaks at its boost speed, so each class shows it when it is
+## fast for that class.
+static func vapour_strength(g_load: float, speed: float, top_speed: float, boost_speed: float) -> float:
+	var pull: float = clampf((g_load - 2.6) / 3.0, 0.0, 1.0)
+	var fast: float = clampf(inverse_lerp(top_speed * 0.9, boost_speed, speed), 0.0, 1.0) * 0.8
+	return pull + fast
 
 
 func clear() -> void:
@@ -80,7 +90,7 @@ func _rebuild(head: Vector3, head_strength: float) -> void:
 		var side: Vector3 = dir.cross(eye - p).normalized() * WIDTH
 		var age: float = 0.0 if i == count else ages[i]
 		var strength: float = head_strength if i == count else strengths[i]
-		var alpha: float = strength * (1.0 - age / LIFETIME) * 0.55
+		var alpha: float = strength * (1.0 - age / LIFETIME) * 0.3
 		var color: Color = Color(1, 1, 1, clampf(alpha, 0.0, 1.0))
 		immediate.surface_set_color(color)
 		immediate.surface_add_vertex(p - side)

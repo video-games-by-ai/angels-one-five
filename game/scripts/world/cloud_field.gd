@@ -35,10 +35,18 @@ func build(terrain: TerrainData, density: float) -> void:
 		if too_close:
 			continue
 		var low: bool = rng.randf() < 0.3
-		centre.y = rng.randf_range(1250.0, 1600.0) if low else rng.randf_range(1900.0, 2600.0)
+		centre.y = (rng.randf_range(1250.0, 1600.0) if low else rng.randf_range(1900.0, 2600.0)) + terrain.altitude_offset
 		var radius: float = rng.randf_range(420.0, 820.0) * (0.7 if low else 1.0)
 		_add_cloud(centre, radius, rng)
 		placed += 1
+
+
+## Add one extra cloud (the weather uses this for shower clouds); returns its node.
+func add_cloud(centre: Vector3, radius: float, seed_value: int) -> Node3D:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = seed_value
+	_add_cloud(centre, radius, rng)
+	return clouds[clouds.size() - 1].node
 
 
 func _add_cloud(centre: Vector3, radius: float, rng: RandomNumberGenerator) -> void:

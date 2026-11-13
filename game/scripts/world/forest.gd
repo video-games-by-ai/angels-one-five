@@ -4,7 +4,6 @@ extends Node3D
 ## chunks that switch off beyond the quality preset's draw distance. Far away the
 ## terrain shader paints the same forests, so the cut-off reads as haze.
 
-const TREE_PATH: String = "res://assets/terrain/alpine_trees.bin"
 const MODEL_PATH: String = "res://assets/models/trees.glb"
 const CHUNK: float = 1200.0
 const RECORD: int = 6
@@ -22,11 +21,13 @@ func build(terrain: TerrainData, mask: Texture2D, profile: Dictionary) -> void:
 	scene.free()
 	needle_material = ShaderMaterial.new()
 	needle_material.shader = load("res://shaders/tree.gdshader")
+	if terrain.look.has("snow_line"):
+		needle_material.set_shader_parameter("snow_line", float(terrain.look.snow_line))
 	var trunk: StandardMaterial3D = StandardMaterial3D.new()
 	trunk.albedo_color = Color(0.22, 0.16, 0.11)
 	trunk.roughness = 1.0
 
-	var data: PackedFloat32Array = FileAccess.get_file_as_bytes(TREE_PATH).to_float32_array()
+	var data: PackedFloat32Array = FileAccess.get_file_as_bytes(TerrainData.asset_path(terrain.id, "trees.bin")).to_float32_array()
 	var buckets: Dictionary = {}
 	var half: float = terrain.size * 0.5
 	for i in range(0, data.size(), RECORD):
@@ -64,7 +65,7 @@ func build(terrain: TerrainData, mask: Texture2D, profile: Dictionary) -> void:
 				clampi(int((data[i + 2] + half) / terrain.spacing + 0.5), 0, terrain.samples - 1)).r
 			buffer[k + 12] = tint
 			buffer[k + 13] = fposmod(yaw * 3.1, 1.0)
-			buffer[k + 14] = 0.0
+			buffer[k + 14] = Weather.ground_snow(data[i], data[i + 2])   # fresh snow under the showers
 			buffer[k + 15] = sun
 			k += 16
 		mm.buffer = buffer

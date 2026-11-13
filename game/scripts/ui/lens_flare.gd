@@ -14,6 +14,7 @@ const GHOSTS: Array[Array] = [  # position along sun->centre axis, radius, colou
 var camera: Camera3D
 var terrain: TerrainData
 var sun_direction: Vector3 = Vector3.UP
+var weather: Weather
 var visibility: float = 0.0
 var glow: GradientTexture2D
 
@@ -31,6 +32,8 @@ func _process(delta: float) -> void:
 	var target: float = 0.0
 	if camera != null and not camera.is_position_behind(camera.global_position + sun_direction * 1000.0):
 		target = 0.0 if _sun_blocked() else 1.0
+		if weather != null:
+			target *= weather.sun_visibility(camera.global_position)
 	visibility = lerpf(visibility, target, 1.0 - exp(-delta * 8.0))
 	queue_redraw()
 

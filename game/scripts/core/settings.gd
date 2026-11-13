@@ -14,6 +14,9 @@ var camera_shake: float = 0.6
 var master_volume: float = 0.8
 var quality: Quality = Quality.HIGH
 var fullscreen: bool = false
+var aircraft: int = 1   ## last aircraft flown (Airframes.Id)
+var snow_showers: bool = true   ## test weather: local snow showers on a clear day
+var map: String = "alpine"      ## last map flown (TerrainData.MAPS id)
 
 
 static func load_or_default() -> GameSettings:
@@ -27,6 +30,9 @@ static func load_or_default() -> GameSettings:
 		s.master_volume = float(cfg.get_value("audio", "master_volume", s.master_volume))
 		s.quality = clampi(int(cfg.get_value("graphics", "quality", s.quality)), 0, 2) as Quality
 		s.fullscreen = bool(cfg.get_value("graphics", "fullscreen", s.fullscreen))
+		s.snow_showers = bool(cfg.get_value("game", "snow_showers", s.snow_showers))
+		s.aircraft = clampi(int(cfg.get_value("game", "aircraft", s.aircraft)), 0, 2)
+		s.map = String(cfg.get_value("game", "map", s.map))
 	return s
 
 
@@ -39,6 +45,9 @@ func save() -> void:
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("graphics", "quality", quality)
 	cfg.set_value("graphics", "fullscreen", fullscreen)
+	cfg.set_value("game", "aircraft", aircraft)
+	cfg.set_value("game", "snow_showers", snow_showers)
+	cfg.set_value("game", "map", map)
 	cfg.save(PATH)
 
 

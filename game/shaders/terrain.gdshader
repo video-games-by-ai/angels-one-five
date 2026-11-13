@@ -3,8 +3,13 @@ shader_type spatial;
 // are rebuilt per pixel, and pre-computed mountain shadows tint the sun light.
 render_mode cull_back;
 
+#include "squall.gdshaderinc"
+
 uniform sampler2D heightmap : filter_linear, repeat_disable;
 uniform sampler2D masks : filter_linear_mipmap, repeat_disable;
+// Optional extra layers: R gravel bed, G brook, B settlement, A reed bed.
+uniform sampler2D masks2 : hint_default_transparent, filter_linear_mipmap, repeat_disable;
+uniform float extra_layers = 0.0;
 uniform sampler2D noise_large : filter_linear_mipmap, repeat_enable;
 uniform sampler2D noise_detail : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float world_size = 24000.0;
@@ -12,6 +17,15 @@ uniform float samples = 2048.0;
 uniform float water_level = 432.0;
 uniform float skirt_depth = 60.0;
 uniform float light_scale = 1.0;
+// Per-map altitudes (metres).
+uniform float snow_line = 2150.0;
+uniform float snow_spread = 420.0;    // how far noise moves the snow line
+uniform float snow_band = 140.0;      // height over which snow fills in
+uniform float alpine_from = 1350.0;   // grass turns to dry alpine turf
+uniform float alpine_to = 1800.0;
+uniform float rock_from = 2350.0;     // bare rock even on gentle slopes
+uniform float rock_to = 2700.0;
+uniform float field_top = 70.0;       // hay meadows reach this far above the lake
 
 uniform vec3 grass_low : source_color = vec3(0.36, 0.43, 0.16);
 uniform vec3 grass_dry : source_color = vec3(0.55, 0.53, 0.27);
@@ -22,6 +36,10 @@ uniform vec3 rock : source_color = vec3(0.42, 0.40, 0.38);
 uniform vec3 rock_dark : source_color = vec3(0.27, 0.26, 0.26);
 uniform vec3 snow : source_color = vec3(0.93, 0.94, 0.97);
 uniform vec3 shore : source_color = vec3(0.52, 0.49, 0.42);
+uniform vec3 gravel : source_color = vec3(0.62, 0.60, 0.54);
+uniform vec3 brook : source_color = vec3(0.16, 0.33, 0.36);
+uniform vec3 yard : source_color = vec3(0.50, 0.47, 0.38);
+uniform vec3 reed : source_color = vec3(0.42, 0.30, 0.17);
 
 varying vec3 world_pos;
 varying float sun_visibility;
@@ -64,7 +82,7 @@ void fragment() {
 
 	// Grass that dries and yellows with altitude, with soft patchiness.
 	vec3 col = mix(grass_low, grass_dry, smoothstep(0.35, 0.8, n_large) * 0.6);
-	col = mix(col, alpine, smoothstep(1350.0, 1800.0, h + (n_mid - 0.5) * 250.0));
+	col = mix(col, alpine, smoothstep(alpine_from, alpine_to, h + (n_mid - 0.5) * 250.0));
 	col = mix(col, meadow, m.a * 0.7);
 
 	// Hay meadows on the flat valley floor: long plots following the valley,
@@ -77,9 +95,19 @@ void fragment() {
 	float margin = (1.0 - smoothstep(1.2, 2.6, min(plot_edge.x, plot_edge.y))) * step(0.55, fract(plot_hash * 7.31));
 	vec3 plot_col = mix(vec3(0.33, 0.42, 0.14), vec3(0.62, 0.58, 0.30), plot_hash * plot_hash);
 	plot_col = mix(plot_col, vec3(0.42, 0.50, 0.17), step(0.82, plot_hash));
-	float fields = m.a * (1.0 - smoothstep(0.0, 0.035, 1.0 - n.y)) * (1.0 - smoothstep(water_level + 70.0, water_level + 110.0, h));
+	float fields = m.a * (1.0 - smoothstep(0.0, 0.035, 1.0 - n.y)) * (1.0 - smoothstep(water_level + field_top, water_level + field_top + 40.0, h));
 	col = mix(col, plot_col * (0.92 + 0.16 * n_small), fields * 0.75);
 	col = mix(col, vec3(0.20, 0.25, 0.11), fields * margin * 0.45);
+
+	// Reed beds and wet meadow by the lake, yards and lanes in the villages,
+	// river gravel and the brooks running through it.
+	vec4 extra = texture(masks2, uv) * extra_layers;
+	col = mix(col, reed * (0.75 + 0.5 * n_small), extra.a * (0.55 + 0.45 * n_mid));
+	col = mix(col, yard * (0.8 + 0.4 * n_small), extra.b * 0.6);
+	float gravel_amount = smoothstep(0.25, 0.7, extra.r + (n_small - 0.5) * 0.35);
+	col = mix(col, gravel * (0.82 + 0.36 * n_small), gravel_amount);
+	float brook_amount = smoothstep(0.3, 0.6, extra.g);
+	col = mix(col, brook, brook_amount);
 
 	float forest_amount = smoothstep(0.18, 0.55, m.b + (n_mid - 0.5) * 0.25);
 	// Valley-floor copses are drawn as real trees; only tint the grass beneath them.
@@ -91,13 +119,23 @@ void fragment() {
 	float strata = 0.5 + 0.5 * sin(h * 0.07 + n_mid * 6.0);
 	vec3 rock_col = mix(rock_dark, rock, 0.35 + 0.65 * strata * n_small);
 	float rock_amount = smoothstep(0.30, 0.46, slope + (n_mid - 0.5) * 0.18);
-	rock_amount = max(rock_amount, smoothstep(2350.0, 2700.0, h) * smoothstep(0.08, 0.22, slope));
+	rock_amount = max(rock_amount, smoothstep(rock_from, rock_to, h) * smoothstep(0.08, 0.22, slope));
 	col = mix(col, rock_col, rock_amount);
 
 	// Snow: altitude with noise, slides off steep rock.
-	float snow_line = 2150.0 + (n_large - 0.5) * 420.0 - (1.0 - sun_visibility) * 120.0;
-	float snow_amount = smoothstep(snow_line, snow_line + 140.0, h) * (1.0 - smoothstep(0.38, 0.58, slope + (n_small - 0.5) * 0.1));
+	float snow_from = snow_line + (n_large - 0.5) * snow_spread - (1.0 - sun_visibility) * 120.0;
+	float snow_amount = smoothstep(snow_from, snow_from + snow_band, h) * (1.0 - smoothstep(0.38, 0.58, slope + (n_small - 0.5) * 0.1));
 	col = mix(col, snow, snow_amount);
+
+	// Fresh snow under the showers: a thin, broken dusting that settles on flat
+	// ground first and lets grass, rock and tree tops show through.
+	float fresh = squall_ground(world_pos.xz);
+	float cover = n_mid * 0.45 + n_small * 0.3 + canopy * 0.25;
+	float settle = 1.0 - smoothstep(0.22, 0.5, slope);
+	float dusting = smoothstep(0.66 - fresh * 0.3, 0.86 - fresh * 0.2, cover + settle * 0.16) * sqrt(fresh);
+	dusting *= mix(0.3, 1.0, settle) * (1.0 - forest_amount * 0.45) * 0.8;
+	col = mix(col, snow * vec3(0.97, 0.98, 1.0), dusting);
+	snow_amount = max(snow_amount, dusting);
 
 	// Gravel shore around the lake.
 	col = mix(col, shore, 1.0 - smoothstep(water_level + 1.0, water_level + 6.0, h));
@@ -115,8 +153,8 @@ void fragment() {
 
 	ALBEDO = col;
 	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
-	ROUGHNESS = mix(0.95, 0.55, snow_amount);
-	SPECULAR = mix(0.2, 0.5, snow_amount);
+	ROUGHNESS = mix(mix(0.95, 0.55, snow_amount), 0.12, brook_amount);
+	SPECULAR = mix(mix(0.2, 0.5, snow_amount), 0.6, brook_amount);
 }
 
 void light() {

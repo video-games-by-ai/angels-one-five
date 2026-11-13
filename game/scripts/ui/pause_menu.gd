@@ -5,6 +5,7 @@ extends Control
 signal resumed
 signal settings_changed
 signal quit_requested
+signal hangar_requested
 
 const TEXT: Color = Color("fbf4e6")
 
@@ -26,7 +27,7 @@ func build(game_settings: GameSettings) -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 	panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(520, 0)
+	panel.custom_minimum_size = Vector2(600, 0)
 	center.add_child(panel)
 	var margin: MarginContainer = MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
@@ -57,6 +58,7 @@ func build(game_settings: GameSettings) -> void:
 		_changed())
 	quality_row.add_child(quality)
 	_check(box, "Fullscreen", settings.fullscreen, func(v: bool) -> void: settings.fullscreen = v)
+	_check(box, "Snow showers (weather test, F4)", settings.snow_showers, func(v: bool) -> void: settings.snow_showers = v)
 
 	var buttons: HBoxContainer = HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 12)
@@ -66,6 +68,11 @@ func build(game_settings: GameSettings) -> void:
 	resume.custom_minimum_size = Vector2(150, 46)
 	resume.pressed.connect(func() -> void: resumed.emit())
 	buttons.add_child(resume)
+	var hangar: Button = Button.new()
+	hangar.text = "Change aircraft"
+	hangar.custom_minimum_size = Vector2(180, 46)
+	hangar.pressed.connect(func() -> void: hangar_requested.emit())
+	buttons.add_child(hangar)
 	var quit: Button = Button.new()
 	quit.text = "Quit to desktop"
 	quit.custom_minimum_size = Vector2(180, 46)

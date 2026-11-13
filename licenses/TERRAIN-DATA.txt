@@ -1,0 +1,25 @@
+Elevation data for the "Plav & Gusinje" map
+===========================================
+
+source-assets/plav_dem.npz and the terrain generated from it
+(game/assets/terrain/plav_*) are derived from Terrain Tiles, an open elevation
+dataset originally produced by Mapzen and hosted by Amazon Web Services Open Data
+(https://registry.opendata.aws/terrain-tiles/). The tiles used (zoom 12, around
+42.6 N 19.9 E) were fetched once with tools/fetch_plav_dem.py.
+
+On land at this zoom the dataset is built from the Shuttle Radar Topography
+Mission (SRTM) survey, which is in the public domain. Credits requested by the
+dataset and its sources:
+
+* Mapzen
+* United States 3DEP (formerly NED) and global GMTED2010 and SRTM terrain data
+  courtesy of the U.S. Geological Survey.
+* Europe terrain data produced using Copernicus data and information funded by
+  the European Union - EU-DEM layers.
+
+The full attribution list of the dataset is at
+https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+
+The heights in the game are not the surveyed heights: they are measured from
+Plav lake, stretched, levelled near the lake and given added detail. Do not use
+them for anything but the game.

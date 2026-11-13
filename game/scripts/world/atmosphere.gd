@@ -10,7 +10,7 @@ var sun: DirectionalLight3D
 var sun_direction: Vector3 = Vector3.UP
 
 
-func build(sun_dir: Vector3) -> void:
+func build(sun_dir: Vector3, altitude_offset: float = 0.0) -> void:
 	sun_direction = sun_dir.normalized()
 	environment = Environment.new()
 	var sky: Sky = Sky.new()
@@ -39,7 +39,7 @@ func build(sun_dir: Vector3) -> void:
 	environment.fog_density = 0.000085
 	environment.fog_aerial_perspective = 0.55
 	environment.fog_sky_affect = 0.0
-	environment.fog_height = 650.0
+	environment.fog_height = 650.0 + altitude_offset
 	environment.fog_height_density = 0.0005
 
 	environment.glow_enabled = true

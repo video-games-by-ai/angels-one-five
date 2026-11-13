@@ -1,12 +1,52 @@
 class_name Effects
 extends Node3D
-## One-shot visual effects: compact fireball, smoke column, sparks and a flash.
+## One-shot effects: aircraft explosions (fireball, smoke column, sparks, flash
+## and a boom heard across the valley), bullet strikes on metal and dust kicked
+## up where rounds hit the ground.
 
 var dot_texture: GradientTexture2D
+var boom: AudioStream
+var spark_cooldown: float = 0.0
+var puff_cooldown: float = 0.0
 
 
 func _ready() -> void:
 	dot_texture = Aircraft._soft_dot()
+	boom = load("res://assets/audio/explosion.wav")
+
+
+func _process(delta: float) -> void:
+	spark_cooldown = maxf(spark_cooldown - delta, 0.0)
+	puff_cooldown = maxf(puff_cooldown - delta, 0.0)
+
+
+## Bright sparks where a round strikes an aircraft.
+func sparks(at: Vector3) -> void:
+	if spark_cooldown > 0.0:
+		return
+	spark_cooldown = 0.045
+	var root: Node3D = _root(at, 0.9)
+	root.add_child(_burst(10, 0.35, Color(1.0, 0.9, 0.6, 1.0), Color(1.0, 0.45, 0.1, 0.0), 0.5, 0.15, true, 26.0, Vector3(0, -9.0, 0)))
+	root.add_child(_burst(4, 0.6, Color(0.25, 0.24, 0.23, 0.5), Color(0.4, 0.4, 0.4, 0.0), 1.2, 3.5, false, 5.0))
+
+
+## Dust or spray where a round strikes the ground or the lake.
+func puff(at: Vector3) -> void:
+	if puff_cooldown > 0.0:
+		return
+	puff_cooldown = 0.07
+	var root: Node3D = _root(at + Vector3(0, 0.5, 0), 1.6)
+	root.add_child(_burst(6, 1.1, Color(0.72, 0.66, 0.56, 0.55), Color(0.8, 0.76, 0.7, 0.0), 1.6, 5.0, false, 7.0, Vector3(0, 2.0, 0)))
+
+
+func _root(at: Vector3, lifetime: float) -> Node3D:
+	var root: Node3D = Node3D.new()
+	root.top_level = true
+	add_child(root)
+	root.global_position = at
+	root.reset_physics_interpolation()
+	get_tree().create_timer(lifetime).timeout.connect(root.queue_free)
+	return root
 
 
 func explosion(at: Vector3, scale_factor: float = 1.0) -> void:
@@ -24,6 +64,14 @@ func explosion(at: Vector3, scale_factor: float = 1.0) -> void:
 	root.add_child(flash)
 	var tween: Tween = create_tween()
 	tween.tween_property(flash, "light_energy", 0.0, 0.5)
+	var sound: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
+	sound.stream = boom
+	sound.unit_size = 160.0
+	sound.max_distance = 6000.0
+	sound.volume_db = 6.0
+	sound.pitch_scale = randf_range(0.9, 1.1)
+	root.add_child(sound)
+	sound.play()
 	get_tree().create_timer(7.0).timeout.connect(root.queue_free)
 
 

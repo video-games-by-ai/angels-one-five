@@ -4,6 +4,9 @@ shader_type spatial;
 // intersections with terrain and a fade when the camera gets close.
 render_mode unshaded, cull_disabled, depth_draw_never, blend_mix;
 
+#define SQUALL_STEPS 4
+#include "squall.gdshaderinc"
+
 uniform sampler2D puff_noise : filter_linear_mipmap, repeat_enable;
 uniform sampler2D depth_texture : hint_depth_texture;
 uniform vec3 sun_direction = vec3(0.0, 0.3, -1.0);
@@ -16,12 +19,16 @@ varying vec3 rel;
 varying float seed;
 varying vec3 centre_world;
 varying float puff_size;
+varying vec4 veil;
 
 void vertex() {
 	rel = INSTANCE_CUSTOM.xyz;
 	seed = INSTANCE_CUSTOM.w;
 	centre_world = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 	puff_size = length(MODEL_MATRIX[0].xyz);
+	// Snow showers between the camera and this puff.
+	vec3 to_puff = centre_world - CAMERA_POSITION_WORLD;
+	veil = squall_fog(CAMERA_POSITION_WORLD, normalize(to_puff), length(to_puff), 0.5, normalize(sun_direction));
 	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
 	MODELVIEW_MATRIX = MODELVIEW_MATRIX * mat4(vec4(puff_size, 0.0, 0.0, 0.0), vec4(0.0, puff_size, 0.0, 0.0), vec4(0.0, 0.0, puff_size, 0.0), vec4(0.0, 0.0, 0.0, 1.0));
 	MODELVIEW_NORMAL_MATRIX = mat3(MODELVIEW_MATRIX);
@@ -63,6 +70,8 @@ void fragment() {
 	// Fade puffs that are almost touching the camera.
 	alpha *= smoothstep(puff_size * 0.25, puff_size * 1.1, length(VERTEX));
 
-	ALBEDO = col;
+	ALBEDO = col * (1.0 - veil.a) + veil.rgb;
+	// Deep inside a shower a cloud is white on white: let it dissolve.
+	alpha *= 1.0 - smoothstep(0.35, 0.9, veil.a);
 	ALPHA = clamp(alpha, 0.0, 1.0);
 }

@@ -1,33 +1,79 @@
 class_name EngineAudio
 extends Node
-## Engine drone and airflow for the local player. Pitch follows RPM, the wind
-## rises with airspeed, boost adds a harder edge.
+## The player's own sounds: the engine of the chosen aircraft (each type has its
+## own voice), airflow, the guns, and bullet strikes given and taken. Engine
+## pitch follows RPM, the wind rises with airspeed, boost adds a harder edge.
 
 var engine: AudioStreamPlayer
 var wind: AudioStreamPlayer
+var guns: AudioStreamPlayer
+var hit: AudioStreamPlayer
+var hurt: AudioStreamPlayer
+var gun_pitch: float = 1.0
+var hit_cooldown: float = 0.0
+var active: bool = false
 
 
 func _ready() -> void:
-	engine = _looping_player("res://assets/audio/engine_loop.wav", -6.0)
-	wind = _looping_player("res://assets/audio/wind_loop.wav", -30.0)
+	engine = _player(null, -60.0, 1)
+	wind = _player(Sfx.looped("res://assets/audio/wind_loop.wav"), -60.0, 1)
+	wind.play()
+	guns = _player(null, -7.0, 8)
+	hit = _player(load("res://assets/audio/hit.wav"), -9.0, 4)
+	hurt = _player(load("res://assets/audio/hurt.wav"), -4.0, 4)
 
 
-func _looping_player(path: String, volume_db: float) -> AudioStreamPlayer:
-	var stream: AudioStreamWAV = load(path)
-	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	stream.loop_begin = 0
-	stream.loop_end = stream.get_length() * stream.mix_rate
+func _player(stream: AudioStream, volume_db: float, polyphony: int) -> AudioStreamPlayer:
 	var player: AudioStreamPlayer = AudioStreamPlayer.new()
 	player.stream = stream
 	player.volume_db = volume_db
+	player.max_polyphony = polyphony
 	add_child(player)
-	player.play()
 	return player
 
 
+## Switch to the sounds of one aircraft type.
+func use_aircraft(spec: Dictionary) -> void:
+	engine.stream = Sfx.looped(String(spec.engine_sound))
+	engine.play()
+	guns.stream = load(String(spec.gun_sound))
+	gun_pitch = float(spec.gun_pitch)
+	active = true
+
+
+func silence() -> void:
+	active = false
+	engine.volume_db = -60.0
+	wind.volume_db = -60.0
+
+
+func shot() -> void:
+	guns.pitch_scale = gun_pitch * randf_range(0.96, 1.04)
+	guns.play()
+
+
+## A round of ours striking an opponent.
+func hit_confirm() -> void:
+	if hit_cooldown <= 0.0:
+		hit_cooldown = 0.05
+		hit.pitch_scale = randf_range(0.9, 1.15)
+		hit.play()
+
+
+## A round striking our own aircraft.
+func struck() -> void:
+	hurt.pitch_scale = randf_range(0.85, 1.1)
+	hurt.play()
+
+
 func update(model: FlightModel, delta: float) -> void:
+	hit_cooldown = maxf(hit_cooldown - delta, 0.0)
+	if not active:
+		return
 	var speed_ratio: float = clampf(model.speed / float(model.spec.top_speed), 0.0, 1.4)
+	var health: float = model.zone_health[Airframes.Zone.ENGINE]
 	var rpm: float = 0.72 + model.throttle * 0.28 + (0.14 if model.boosting else 0.0) + (speed_ratio - 0.8) * 0.08
+	rpm *= lerpf(0.88, 1.0, health)   # a damaged engine labours
 	engine.pitch_scale = lerpf(engine.pitch_scale, clampf(rpm, 0.5, 1.5), 1.0 - exp(-delta * 4.0))
 	var engine_db: float = -9.0 + model.throttle * 4.0 + (2.5 if model.boosting else 0.0)
 	engine.volume_db = lerpf(engine.volume_db, engine_db if model.alive else -60.0, 1.0 - exp(-delta * 5.0))
