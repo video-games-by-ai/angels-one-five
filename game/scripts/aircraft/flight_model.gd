@@ -9,6 +9,10 @@ extends RefCounted
 ## in a dive, and the steeper the climb the less the labouring engine can add,
 ## so no aircraft hangs on its propeller. Out of flying speed the nose falls
 ## until the speed is back (a gentle stall, never a spin).
+##
+## The brake is how these aircraft were slowed: the throttle chopped to idle and
+## the flaps dropped into the airflow. It sheds speed fast, level or in a dive,
+## and held long enough in level flight it takes the aircraft into the stall.
 
 const GRAVITY: float = 9.81
 ## Share of its thrust the engine loses hauling the aircraft straight up. The
@@ -27,6 +31,9 @@ const STALL_PULL_LEAST: float = 0.1   ## share of the pitch rate left to pull wi
 const STALL_NOSE_DROP: float = 1.3    ## rad/s the nose falls when stalled
 const STALL_NOSE_REST: float = -0.5   ## the fall stops with the nose this far down (sine of the pitch)
 const MIN_SPEED: float = 0.6          ## the slowest the aircraft can go, times its stall speed
+const BRAKE_POWER: float = 0.1        ## the engine at idle, as a throttle setting
+const BRAKE_DRAG: float = 2.2         ## times the clean drag with the flaps down
+const BRAKE_RATE: float = 3.0         ## share of the full brake that comes on (or off) per second
 const TREE_HEIGHT: float = 17.0
 const MAX_HIT_MARKS: int = 48   ## bullet holes kept for the damage panels; the oldest go first
 const GUN_COOL_TIME: float = 10.0   ## seconds for red-hot guns to cool completely
@@ -44,6 +51,8 @@ var speed: float = 130.0
 var throttle: float = 0.8
 var boost_energy: float = 1.0
 var boosting: bool = false
+var braking: bool = false                 ## the brake is held: engine at idle, flaps down
+var brake_amount: float = 0.0             ## 0..1, how far the brake has come on
 var angular_rate: Vector3 = Vector3.ZERO  ## pitch (nose up +), yaw (right +), roll (right +)
 var controls: Vector3 = Vector3.ZERO      ## smoothed surface deflection -1..1, same axes
 var g_load: float = 1.0
@@ -80,6 +89,8 @@ func setup(id: int, spawn: Vector3, heading: float) -> void:
 	g_load = 1.0
 	stalled = false
 	boosting = false
+	braking = false
+	brake_amount = 0.0
 
 
 func basis() -> Basis:
@@ -157,15 +168,18 @@ func step(cmd: FlightCommand, dt: float, terrain: TerrainData) -> bool:
 
 	# Throttle and boost (water injection: a limited, regenerating reserve).
 	throttle = clampf(throttle + cmd.throttle_axis * dt * 0.6, 0.25, 1.0)
-	boosting = cmd.boost and boost_energy > (0.0 if boosting else 0.08)
+	braking = cmd.brake
+	brake_amount = move_toward(brake_amount, 1.0 if braking else 0.0, BRAKE_RATE * dt)
+	boosting = cmd.boost and not braking and boost_energy > (0.0 if boosting else 0.08)
 	boost_energy = clampf(boost_energy + (-1.0 / 7.0 if boosting else 1.0 / 18.0) * dt, 0.0, 1.0)
 
 	var top: float = float(spec.top_speed)
 	var thrust: float = float(spec.thrust)
-	var drag: float = thrust / (top * top)
+	var drag: float = thrust / (top * top) * lerpf(1.0, BRAKE_DRAG, brake_amount)
 	var power: float = throttle
 	if boosting:
 		power = pow(float(spec.boost_speed) / top, 2.0)
+	power = lerpf(power, minf(power, BRAKE_POWER), brake_amount)
 	power *= damage_power(zone_health[Airframes.Zone.ENGINE], hull_ratio())
 	g_load = 1.0 + absf(angular_rate.x) * speed / GRAVITY
 	var induced: float = maxf(g_load - 1.5, 0.0) * 0.55
@@ -217,7 +231,14 @@ func engine_load() -> float:
 		return maxf(rise, -1.0)
 	var slow: float = clampf((0.75 - speed / float(spec.top_speed)) / 0.4, 0.0, 1.0)
 	var pull: float = clampf((g_load - 2.0) / 5.0, 0.0, 1.0)
-	return clampf(rise * 0.9 + slow * 0.45 + pull * 0.35, 0.0, 1.0) * lerpf(0.5, 1.0, throttle)
+	return clampf(rise * 0.9 + slow * 0.45 + pull * 0.35, 0.0, 1.0) * lerpf(0.5, 1.0, engine_throttle())
+
+
+## The throttle the engine is actually running at: the pilot's setting, or idle
+## while the brake is held (the setting itself is kept for when it is released).
+## What is heard and seen of the engine goes by this.
+func engine_throttle() -> float:
+	return minf(throttle, BRAKE_POWER) if braking and alive else throttle
 
 
 func hull_ratio() -> float:

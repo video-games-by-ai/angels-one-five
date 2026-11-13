@@ -101,11 +101,13 @@ static func apply(state: Dictionary, model: FlightModel) -> void:
 	model.throttle = state.throttle
 	model.controls = state.controls
 	model.boosting = (int(state.flags) & NetProtocol.FLAG_BOOSTING) != 0
+	model.braking = (int(state.flags) & NetProtocol.FLAG_BRAKING) != 0
 
 
 ## A model's motion as a report, for sending.
 static func capture(model: FlightModel, life: int, tick: int) -> Dictionary:
-	var flags: int = (NetProtocol.FLAG_BOOSTING if model.boosting else 0) | (NetProtocol.FLAG_FIRING if model.firing else 0)
+	var flags: int = (NetProtocol.FLAG_BOOSTING if model.boosting else 0) | (NetProtocol.FLAG_FIRING if model.firing else 0) \
+		| (NetProtocol.FLAG_BRAKING if model.braking else 0)
 	return {"life": life, "tick": tick, "position": model.position, "orientation": model.orientation.normalized(),
 		"direction": model.travel_direction.normalized(), "speed": model.speed, "throttle": model.throttle,
 		"controls": model.controls, "flags": flags}

@@ -465,7 +465,7 @@ func _draw_bottom(s: float) -> void:
 	var hull: float = model.hull_ratio()
 	x += _bar(Vector2(x, y), "HULL", hull, TEXT if hull > 0.5 else (ZONE_DAMAGED if hull > 0.25 else ZONE_CRITICAL), s, 150.0)
 	x += _bar(Vector2(x, y), "BOOST", model.boost_energy, AMBER if not model.boosting else Color("ffe4a0"), s, 150.0)
-	x += _bar(Vector2(x, y), "THR", model.throttle, DIM, s, 90.0)
+	x += _bar(Vector2(x, y), "THR", model.engine_throttle(), AMBER if model.braking else DIM, s, 90.0, "BRK" if model.braking else "")
 	var heat_tone: Color = heat_colour()
 	if model.gun_overheated and int(clock * 5.0) % 2 == 0:
 		heat_tone = Color(heat_tone, 0.45)
@@ -610,16 +610,17 @@ func _draw_hints(s: float) -> void:
 	var a: float = clampf(hint_time / 2.0, 0.0, 1.0)
 	var lines: PackedStringArray = [
 		"MOUSE  steer toward the aim circle",
-		"LEFT CLICK / SPACE  fire the guns",
+		"LEFT CLICK  fire the guns",
 		"Aim ahead of a turning target; watch your tracers",
 		"Fire in bursts: the guns overheat, then must cool",
 		"SHIFT  boost      W / S  throttle",
+		"SPACE  brake: hold to slow down",
 		"A / D  roll      Q / E  rudder",
 		"C  centre aim     Z / WHEEL  zoom for long shots",
 		"ESC  pause & change aircraft",
 		"F4  snow showers on / off (weather test)",
 	]
-	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 350 * s), Vector2(410 * s, 258 * s))
+	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 376 * s), Vector2(410 * s, 284 * s))
 	draw_rect(rect, Color(PANEL, PANEL.a * a), true)
 	draw_rect(rect, Color(EDGE, EDGE.a * a), false, 1.0)
 	for i in range(lines.size()):

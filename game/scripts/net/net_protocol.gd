@@ -5,7 +5,7 @@ extends RefCounted
 ## exact length and every value first; anything malformed decodes to {}. This is
 ## the only code that reads bytes from another machine.
 
-const VERSION: int = 2   ## 2: chat
+const VERSION: int = 3   ## 2: chat, 3: brake flag
 const MAX_PLAYERS: int = 4
 const NAME_MAX: int = 16
 const REASON_MAX: int = 120
@@ -25,6 +25,7 @@ const UNRELIABLE: Array[int] = [Msg.STATE, Msg.WORLD]
 
 const FLAG_BOOSTING: int = 1
 const FLAG_FIRING: int = 2
+const FLAG_BRAKING: int = 4
 
 
 static func encode(m: Dictionary) -> PackedByteArray:
@@ -259,7 +260,7 @@ static func _get_state(r: Reader) -> Dictionary:
 	s.throttle = r.u8() / 255.0
 	s.controls = Vector3(r.s8(), r.s8(), r.s8()) / 127.0
 	s.flags = r.u8()
-	r.require(absf(q.length() - 1.0) < 0.05 and absf(d.length() - 1.0) < 0.05 and float(s.speed) >= 0.0 and int(s.flags) < 4)
+	r.require(absf(q.length() - 1.0) < 0.05 and absf(d.length() - 1.0) < 0.05 and float(s.speed) >= 0.0 and int(s.flags) < 8)
 	s.orientation = q.normalized() if r.ok else Quaternion.IDENTITY
 	s.direction = d.normalized() if r.ok else Vector3.FORWARD
 	return s

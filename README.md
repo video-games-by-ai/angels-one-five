@@ -84,6 +84,13 @@ aircraft is out of flying speed in 7 to 10 seconds, even on boost. Then it
 stalls: the HUD warns, the nose falls below the horizon and the controls come
 back as the speed does. About 30° is a climb that can be held at full throttle.
 
+**Brake.** Holding Space chops the engine to idle and drops the flaps fully into
+the airflow, a little more than doubling the drag. From top speed it sheds 210
+to 255 km/h in 4 seconds (throttling back: about 100), enough to make a pursuer overshoot or to tighten a turn,
+and it holds a dive to a modest speed. The throttle setting is kept and comes
+back when the key is released; the speed has to be earned again. Held long enough
+in level flight it takes the aircraft into the stall. The AI pilots do not use it.
+
 **Engines.** Each engine is two loops, low revs and high revs, crossfaded as
 the RPM rises, so the note climbs without the sound turning thin. They are
 tuned against recordings of the real aircraft (measured, not sampled): the two
@@ -133,9 +140,10 @@ open `game/project.godot` and press F5.
 | Input | Action |
 |---|---|
 | Mouse | Move the aim circle; the aircraft banks and turns toward it |
-| Left click / Space | Fire the guns |
+| Left click | Fire the guns |
 | Shift | Boost (limited, regenerating reserve) |
 | W / S | Throttle up / down |
+| Space | Brake: hold to slow down (engine to idle, flaps fully down) |
 | A / D | Manual roll |
 | Q / E | Rudder |
 | C | Re-centre the aim on the nose |

@@ -219,7 +219,7 @@ responsive flight model. `FlightModel` would support it later without a redesign
 
 | Message | Delivery | Rate | Content |
 |---|---|---|---|
-| `state` | unreliable | 30 per second | tick, position, orientation, travel direction, speed, throttle, control deflections, flags (boosting, firing, alive). About 50 bytes |
+| `state` | unreliable | 30 per second | tick, position, orientation, travel direction, speed, throttle, control deflections, flags (boosting, firing, braking). About 50 bytes |
 | `hit_claim` | reliable | when it happens | target id, damage zone, number of rounds, tick |
 | `damage` | reliable | when it happens | target, shooter, zone, new hull and zone health |
 | `destroyed`, `spawn`, `score` | reliable | when it happens | ids, position and heading, totals |
@@ -236,7 +236,7 @@ A remote aircraft's `FlightModel` is not stepped. Its position and orientation a
 written from received snapshots, drawn about 100 ms in the past and blended
 between the two nearest snapshots. If packets stop, the aircraft continues along
 its last velocity for up to 250 ms and then holds. Control deflections and the
-boosting flag drive the existing visuals and sounds unchanged.
+boosting and braking flags drive the existing visuals and sounds unchanged.
 
 Remote gunfire is drawn locally: while a remote aircraft's `firing` flag is set,
 its rounds are fired into the local `BulletField` as cosmetic rounds that cause no
@@ -471,7 +471,7 @@ All on Godot 4.5.1, Linux, 2026-11-12.
   joiner's line comes back under their own name; a joiner cannot pose as the
   host; a flood of 12 lines is cut to the burst and the sender stays connected.
   A line shows for 8 s and fades over 1 s; long lines wrap inside the box. While
-  typing, held flight keys and Space do nothing and the mouse still steers.
+  typing, held flight keys and Space do nothing and the mouse still steers and fires.
 
 **`tools/net_smoke.sh`**: whole matches between separate headless game
 processes over loopback, all pilots flown by the AI, first to 2 kills.

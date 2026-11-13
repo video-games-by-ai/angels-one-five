@@ -28,7 +28,7 @@ static func register_actions() -> void:
 	var keys: Dictionary = {
 		"throttle_up": [KEY_W, KEY_UP], "throttle_down": [KEY_S, KEY_DOWN],
 		"roll_left": [KEY_A, KEY_LEFT], "roll_right": [KEY_D, KEY_RIGHT],
-		"yaw_left": [KEY_Q], "yaw_right": [KEY_E], "boost": [KEY_SHIFT],
+		"yaw_left": [KEY_Q], "yaw_right": [KEY_E], "boost": [KEY_SHIFT], "brake": [KEY_SPACE],
 		"center_aim": [KEY_C], "zoom": [KEY_Z], "pause": [KEY_ESCAPE], "toggle_fps": [KEY_F3],
 		"fullscreen": [KEY_F11], "toggle_weather": [KEY_F4],
 	}
@@ -46,14 +46,6 @@ static func register_actions() -> void:
 			var mb: InputEventMouseButton = InputEventMouseButton.new()
 			mb.button_index = pair[1]
 			InputMap.action_add_event(pair[0], mb)
-	if not InputMap.action_has_event("fire", _key_event(KEY_SPACE)):
-		InputMap.action_add_event("fire", _key_event(KEY_SPACE))
-
-
-static func _key_event(key: Key) -> InputEventKey:
-	var ev: InputEventKey = InputEventKey.new()
-	ev.physical_keycode = key
-	return ev
 
 
 func reset(direction: Vector3) -> void:
@@ -131,7 +123,8 @@ func sample(delta: float, aircraft_position: Vector3, nose: Vector3) -> FlightCo
 	command.roll_axis = Input.get_axis("roll_left", "roll_right") if keys else 0.0
 	command.yaw_axis = Input.get_axis("yaw_left", "yaw_right") if keys else 0.0
 	command.boost = keys and Input.is_action_pressed("boost")
-	# While typing, Space is a space: only the mouse button fires.
-	command.fire = enabled and (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) if typing else Input.is_action_pressed("fire"))
+	# While typing, Space is a space, not the brake. The guns are on the mouse.
+	command.brake = keys and Input.is_action_pressed("brake")
+	command.fire = enabled and Input.is_action_pressed("fire")
 	command.rocket = enabled and Input.is_action_just_pressed("rocket")
 	return command

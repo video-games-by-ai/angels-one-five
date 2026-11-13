@@ -16,6 +16,7 @@ func _init() -> void:
 	_test_engine_follows_the_flying()
 	_test_level_assist_rolls_level()
 	_test_boost_drains_and_speeds_up()
+	_test_brake()
 	_test_ground_collision()
 	_test_classes_differ()
 	_test_mouse_aim()
@@ -191,6 +192,106 @@ func _test_boost_drains_and_speeds_up() -> void:
 	_fly(b, Vector3.FORWARD, 4.0, true)
 	check(b.speed > a.speed + 5.0, "boost increases speed")
 	check(b.boost_energy < 0.6 and a.boost_energy > 0.99, "boost drains the reserve")
+
+
+## Space: the engine goes to idle and the flaps come down. It sheds speed far
+## faster than throttling back, holds a dive, and held too long it stalls.
+func _test_brake() -> void:
+	PlayerInput.register_actions()
+	var space: InputEventKey = InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	check(InputMap.action_has_event("brake", space) and not InputMap.action_has_event("fire", space), "Space is the brake, not the trigger")
+	var input: PlayerInput = PlayerInput.new()
+	input.settings = GameSettings.new()
+	input.reset(Vector3.FORWARD)
+	Input.action_press("brake")
+	var held: bool = input.sample(0.016, Vector3.ZERO, Vector3.FORWARD).brake
+	input.typing = true
+	var typed: bool = input.sample(0.016, Vector3.ZERO, Vector3.FORWARD).brake
+	Input.action_release("brake")
+	input.typing = false
+	check(held and not typed and not input.sample(0.016, Vector3.ZERO, Vector3.FORWARD).brake, "the brake is on while Space is held, and not while typing")
+	input.free()
+
+	var cmd: FlightCommand = FlightCommand.new()
+	cmd.aim_direction = Vector3.FORWARD
+	for id in [Airframes.Id.SPITFIRE, Airframes.Id.MUSTANG, Airframes.Id.THUNDERBOLT]:
+		var s: Dictionary = Airframes.spec(id)
+		var name: String = String(s.short)
+		var top: float = float(s.top_speed)
+		# Four seconds from top speed: throttled right back, and braking.
+		var eased: FlightModel = _model(id)
+		var braked: FlightModel = _model(id)
+		for m: FlightModel in [eased, braked]:
+			m.speed = top
+			m.throttle = 1.0
+		cmd.brake = false
+		cmd.throttle_axis = -1.0
+		for i in range(240):
+			eased.step(cmd, 1.0 / 60.0, terrain)
+		cmd.brake = true
+		cmd.throttle_axis = 0.0
+		cmd.boost = true
+		var after_one_step: float = 0.0
+		for i in range(240):
+			braked.step(cmd, 1.0 / 60.0, terrain)
+			if i == 0:
+				after_one_step = top - braked.speed
+		check(top - braked.speed > 50.0 and braked.speed < eased.speed - 25.0,
+			"%s: 4 s of brake from top speed sheds %.0f km/h (throttling back: %.0f)" % [name, (top - braked.speed) * 3.6, (top - eased.speed) * 3.6])
+		check(after_one_step < 0.2, "%s: the brake comes on smoothly, not as a jolt" % name)
+		check(braked.braking and not braked.boosting and braked.boost_energy > 0.99, "%s: boost does not cut in while braking" % name)
+		check(braked.throttle == 1.0 and is_equal_approx(braked.engine_throttle(), FlightModel.BRAKE_POWER), "%s: the engine idles and the throttle setting is kept" % name)
+		check(Sfx.engine_rpm(braked) < Sfx.engine_rpm(eased), "%s: the engine is heard dropping to idle" % name)
+		# Released: the engine is back and the speed returns.
+		cmd.brake = false
+		cmd.boost = false
+		var slow: float = braked.speed
+		for i in range(180):
+			braked.step(cmd, 1.0 / 60.0, terrain)
+		check(not braked.braking and braked.brake_amount == 0.0 and braked.engine_throttle() == 1.0 and braked.speed > slow + 8.0,
+			"%s: released, it accelerates again (%.0f to %.0f km/h in 3 s)" % [name, slow * 3.6, braked.speed * 3.6])
+		# Held in level flight it ends in the stall.
+		cmd.brake = true
+		var stalled_after: float = -1.0
+		for i in range(1500):
+			if braked.step(cmd, 1.0 / 60.0, terrain):
+				break
+			if braked.stalled:
+				stalled_after = i / 60.0
+				break
+		check(stalled_after > 3.0, "%s: held in level flight, the brake ends in a stall (after %.1f s)" % [name, stalled_after])
+		# A 40 degree dive from cruise: clean it runs past top speed, braked it is held well under.
+		var dive: Vector3 = Vector3(0.0, -sin(deg_to_rad(40.0)), -cos(deg_to_rad(40.0)))
+		var speeds: Array[float] = []
+		for brake: bool in [false, true]:
+			var m: FlightModel = _model(id)
+			m.position.y += 1500.0
+			m.throttle = 1.0
+			cmd.aim_direction = dive
+			cmd.brake = brake
+			for i in range(480):
+				if m.step(cmd, 1.0 / 60.0, terrain):
+					break
+			speeds.append(m.speed)
+		cmd.aim_direction = Vector3.FORWARD
+		check(speeds[0] > top and speeds[1] < top * 0.75, "%s: the brake holds a 40 degree dive (%.0f km/h, %.0f clean)" % [name, speeds[1] * 3.6, speeds[0] * 3.6])
+
+		# The flaps go all the way down at any speed, and back up when it is released.
+		var a: Aircraft = Aircraft.new()
+		root.add_child(a)
+		a.build(s, 0, false)
+		var shown: FlightModel = _model(id)
+		shown.speed = top
+		shown.braking = true
+		for i in range(120):
+			a.animate(shown, 1.0 / 60.0)
+		var down: float = a.flap_amount
+		shown.braking = false
+		for i in range(120):
+			a.animate(shown, 1.0 / 60.0)
+		check(down == 1.0 and a.flap_amount == 0.0, "%s: braking drops the flaps fully at top speed; released, they go up" % name)
+		a.free()
 
 
 func _test_ground_collision() -> void:

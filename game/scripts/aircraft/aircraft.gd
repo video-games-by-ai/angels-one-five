@@ -227,7 +227,7 @@ func _build_prop_disc(radius: float) -> void:
 
 ## Per-frame visual update from the simulated state.
 func animate(model: FlightModel, delta: float) -> void:
-	var rpm_ratio: float = clampf(0.55 + model.throttle * 0.4 + (0.15 if model.boosting else 0.0), 0.0, 1.2)
+	var rpm_ratio: float = clampf(0.55 + model.engine_throttle() * 0.4 + (0.15 if model.boosting else 0.0), 0.0, 1.2)
 	# Blades turn at a visible "camera strobe" rate; the disc carries the blur.
 	prop_angle = wrapf(prop_angle + delta * TAU * (1.1 + rpm_ratio * 0.9), 0.0, TAU)
 	disc_spin += delta * 40.0 * rpm_ratio
@@ -246,13 +246,15 @@ func animate(model: FlightModel, delta: float) -> void:
 	if surfaces.has("Rudder"):
 		(surfaces["Rudder"] as Node3D).rotation.y = c.y * RUDDER_TRAVEL
 	_measure_load(model, delta)
-	flap_amount = move_toward(flap_amount, flap_target(model.speed, felt_load, model.spec), FLAP_RATE * delta)
+	# The brake puts them all the way down, whatever the speed.
+	var flap_wanted: float = 1.0 if model.braking and model.alive else flap_target(model.speed, felt_load, model.spec)
+	flap_amount = move_toward(flap_amount, flap_wanted, FLAP_RATE * delta)
 	_pose_flaps()
 	_flex_wings(model.near_stall(), delta)
 	for flame in flames:
 		flame.emitting = model.boosting
 	for smoke in exhausts:
-		smoke.amount_ratio = 0.55 + model.throttle * 0.45
+		smoke.amount_ratio = 0.55 + model.engine_throttle() * 0.45
 	var vapour: float = TipTrail.vapour_strength(model.g_load, model.speed, float(model.spec.top_speed), float(model.spec.boost_speed))
 	for i in range(trails.size()):
 		# The ribbon leaves the bent tip, not where the straight wing would end.

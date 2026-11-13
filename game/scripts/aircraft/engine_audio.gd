@@ -123,7 +123,7 @@ func update(model: FlightModel, delta: float) -> void:
 	labour = lerpf(labour, clampf(model.engine_load(), 0.0, 1.0), 1.0 - exp(-delta * 2.5))
 	shudder_phase = fmod(shudder_phase + delta * SHUDDER_RATE * lerpf(1.0, 0.8, labour), 1000.0)
 	var shudder: float = (0.65 * sin(shudder_phase * TAU) + 0.35 * sin(shudder_phase * TAU * 1.62 + 1.0)) * SHUDDER_DB * labour * labour
-	var wanted_db: float = ENGINE_DB + model.throttle * 3.5 + (2.5 if model.boosting else 0.0) + labour * LABOUR_DB if model.alive else -60.0
+	var wanted_db: float = ENGINE_DB + model.engine_throttle() * 3.5 + (2.5 if model.boosting else 0.0) + labour * LABOUR_DB if model.alive else -60.0
 	level_db = lerpf(level_db, wanted_db, 1.0 - exp(-delta * 5.0))
 	engine_low.pitch_scale = layers[0]
 	engine_low.volume_db = level_db + shudder + linear_to_db(maxf(layers[1], 0.001))

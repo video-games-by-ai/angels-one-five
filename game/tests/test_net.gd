@@ -167,6 +167,27 @@ func _test_protocol() -> void:
 	check((s.position as Vector3).is_equal_approx(_state().position) and int(s.tick) == 120 and int(s.flags) == NetProtocol.FLAG_FIRING
 		and absf(float(s.throttle) - 0.8) < 0.01 and (s.controls as Vector3).distance_to(Vector3(0.5, -0.25, 1.0)) < 0.02,
 		"motion report values arrive intact")
+	var every_flag: Dictionary = _state()
+	every_flag.flags = NetProtocol.FLAG_BOOSTING | NetProtocol.FLAG_FIRING | NetProtocol.FLAG_BRAKING
+	var unknown_flag: Dictionary = _state()
+	unknown_flag.flags = 8
+	check(int(NetProtocol.decode(NetProtocol.encode({"type": NetProtocol.Msg.STATE, "state": every_flag})).state.flags) == 7
+		and NetProtocol.decode(NetProtocol.encode({"type": NetProtocol.Msg.STATE, "state": unknown_flag})).is_empty(),
+		"boosting, firing and braking flags arrive together; unknown flags are refused")
+	var braking: FlightModel = FlightModel.new()
+	braking.setup(0, Vector3(0, 900, 0), 0.0)
+	braking.braking = true
+	var seen: FlightModel = FlightModel.new()
+	seen.setup(0, Vector3.ZERO, 0.0)
+	var sent: Dictionary = NetProtocol.decode(NetProtocol.encode({"type": NetProtocol.Msg.STATE, "state": SnapshotBuffer.capture(braking, 0, 1)})).state
+	SnapshotBuffer.apply(sent, seen)
+	braking.braking = false
+	var released: FlightModel = FlightModel.new()
+	released.setup(0, Vector3.ZERO, 0.0)
+	released.braking = true
+	SnapshotBuffer.apply(SnapshotBuffer.capture(braking, 0, 2), released)
+	check(seen.braking and is_equal_approx(seen.engine_throttle(), FlightModel.BRAKE_POWER) and not released.braking,
+		"a remote aircraft's brake is seen (flaps, idling engine) and seen released")
 	# Values that encode but must not be accepted.
 	var nan_state: Dictionary = _state()
 	nan_state.position = Vector3(NAN, 0, 0)
@@ -716,17 +737,19 @@ func _test_typing_keeps_mouse() -> void:
 	input.reset(Vector3.FORWARD)
 	Input.action_press("throttle_up")
 	Input.action_press("roll_left")
+	Input.action_press("brake")
 	Input.action_press("fire")
 	var flying: FlightCommand = input.sample(0.016, Vector3.ZERO, Vector3.FORWARD)
 	var flying_throttle: float = flying.throttle_axis
-	var flying_fire: bool = flying.fire
+	var flying_brake: bool = flying.brake
 	input.typing = true
 	var typing: FlightCommand = input.sample(0.016, Vector3.ZERO, Vector3.FORWARD)
-	check(flying_throttle > 0.5 and flying_fire, "keys fly the aircraft normally")
-	check(typing.throttle_axis == 0.0 and typing.roll_axis == 0.0 and not typing.fire, "while typing, letters and Space do not fly or fire")
+	check(flying_throttle > 0.5 and flying_brake and flying.fire, "keys fly the aircraft normally")
+	check(typing.throttle_axis == 0.0 and typing.roll_axis == 0.0 and not typing.brake, "while typing, letters and Space do not fly or brake")
+	check(typing.fire, "while typing, the mouse button still fires")
 	input.apply_mouse(Vector2(120, 0))
 	check(not input.aim_direction.is_equal_approx(Vector3.FORWARD), "while typing, the mouse still steers")
-	for action in ["throttle_up", "roll_left", "fire"]:
+	for action in ["throttle_up", "roll_left", "brake", "fire"]:
 		Input.action_release(action)
 	input.free()
 

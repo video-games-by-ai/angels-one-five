@@ -36,7 +36,7 @@ const ENGINE_DIVE_RISE: float = 0.10
 const ENGINE_SPEED_SHARE: float = 0.18   ## revs gained per unit of airspeed (as a share of top speed)
 static func engine_rpm(model: FlightModel) -> float:
 	var speed_ratio: float = clampf(model.speed / float(model.spec.top_speed), 0.0, 1.4)
-	var rpm: float = 0.70 + model.throttle * 0.30 + (0.16 if model.boosting else 0.0) + (speed_ratio - 0.8) * ENGINE_SPEED_SHARE
+	var rpm: float = 0.70 + model.engine_throttle() * 0.30 + (0.16 if model.boosting else 0.0) + (speed_ratio - 0.8) * ENGINE_SPEED_SHARE
 	var load: float = model.engine_load()
 	rpm -= load * (ENGINE_LOAD_SAG if load > 0.0 else ENGINE_DIVE_RISE)
 	return clampf(rpm * lerpf(0.86, 1.0, model.zone_health[Airframes.Zone.ENGINE]), 0.6, 1.4)
