@@ -8,7 +8,24 @@ extends Node3D
 ## a little larger the further away they are, so they stay readable at range.
 
 const TEAM_COLORS: Array[Color] = [Color("f2b33d"), Color("4db4f0"), Color("ff7a3d")]
-const SURFACE_DEFLECTION: float = deg_to_rad(20.0)
+## Full travel of each control surface. Larger than the aircraft really used,
+## so the movement reads from the chase camera.
+const AILERON_TRAVEL: float = deg_to_rad(20.0)
+const ELEVATOR_TRAVEL: float = deg_to_rad(28.0)
+const RUDDER_TRAVEL: float = deg_to_rad(30.0)
+const FLAP_RATE: float = 0.7          ## share of full flap travel per second
+const COMBAT_FLAPS: float = 0.6       ## how far down the flaps go in a turn, share of full travel
+const COMBAT_FROM: float = 0.1        ## share of the hardest pull at which they start to drop
+const COMBAT_FULL: float = 0.5        ## share of the hardest pull at which they are at COMBAT_FLAPS
+## The wings bend like a spring: about two swings a second, settling within a
+## couple of overshoots once the load changes.
+const FLEX_FREQUENCY: float = 2.2
+const FLEX_DAMPING: float = 0.3
+## Load at which the tips rise the aircraft's full `flex`: the hardest pull the
+## game's aircraft make (they turn far tighter than the real ones could).
+const FLEX_FULL_LOAD: float = 18.0
+const FLEX_LEAST: float = -0.25       ## pushing below 1 g bends them down, this share at most
+const BUFFET: float = 0.06            ## stall buffet, metres at the tips
 const SPOT_FROM: float = 700.0      ## metres: beyond this a distant aircraft is drawn larger
 const SPOT_SHARE: float = 0.6       ## how much of the shrinking with distance is made up for
 const SPOT_MAX: float = 2.5         ## never drawn larger than this
@@ -24,6 +41,22 @@ var propeller: Node3D
 var prop_disc: MeshInstance3D
 var prop_material: ShaderMaterial
 var surfaces: Dictionary = {}
+var flaps: Array[Node3D] = []
+var flap_angle: float = 0.0
+var flap_slide: float = 0.0                ## metres the flaps move back when fully down
+var flap_rest: Array[Vector3] = []
+var flap_amount: float = 0.0               ## 0 = up, 1 = fully down
+var flex_meshes: Array[MeshInstance3D] = []
+var flex_shapes: PackedInt32Array = PackedInt32Array()
+var flex_tip: float = 0.0                  ## metres the tips rise in the hardest pull
+var flex_bend: float = 0.0                 ## metres the tips are bent up right now
+var flex_speed: float = 0.0
+var flex_shown: float = 0.0                ## bend last given to the meshes
+var felt_load: float = 1.0                 ## g felt along the aircraft's up axis, measured from its motion
+var last_velocity: Vector3 = Vector3.ZERO
+var load_time: float = 0.0
+var load_measured: bool = false
+var buffet_phase: float = 0.0
 var skin_material: ShaderMaterial
 var muzzles: Array[Node3D] = []
 var exhausts: Array[GPUParticles3D] = []
@@ -94,11 +127,26 @@ func build(spec: Dictionary, team: int, effects: bool = true, voiced: bool = fal
 			mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		# Keeps the paint pattern continuous across parts that have their own origin.
 		mesh_instance.set_instance_shader_parameter("part_offset", _offset_in_model(mesh_instance))
+		var shape: int = mesh_instance.find_blend_shape_by_name(&"Flex")
+		if shape >= 0:
+			mesh_instance.set_blend_shape_value(shape, 0.0)
+			flex_meshes.append(mesh_instance)
+			flex_shapes.append(shape)
 	propeller = model_root.find_child("Propeller", true, false)
 	for part in ["Aileron_L", "Aileron_R", "Elevator_L", "Elevator_R", "Rudder"]:
 		var n: Node3D = model_root.find_child(part, true, false)
 		if n != null:
 			surfaces[part] = n
+	for n in model_root.find_children("Flap_*", "Node3D", true, false):
+		flaps.append(n)
+		flap_rest.append((n as Node3D).position)
+	flap_angle = deg_to_rad(float(spec.flap_angle))
+	flap_slide = float(spec.flap_slide)
+	flex_tip = float(spec.flex)
+	# Shown again for a new life: start clean rather than read the jump as a load.
+	visibility_changed.connect(func() -> void:
+		if visible:
+			reset_pose())
 	for tag in ["L", "R"]:
 		var muzzle: Node3D = model_root.find_child("Muzzle_" + tag, true, false)
 		if muzzle != null:
@@ -189,21 +237,27 @@ func animate(model: FlightModel, delta: float) -> void:
 			prop_material.set_shader_parameter("spin", disc_spin)
 	var c: Vector3 = model.controls
 	if surfaces.has("Aileron_R"):
-		(surfaces["Aileron_R"] as Node3D).rotation.x = -c.z * SURFACE_DEFLECTION
+		(surfaces["Aileron_R"] as Node3D).rotation.x = -c.z * AILERON_TRAVEL
 	if surfaces.has("Aileron_L"):
-		(surfaces["Aileron_L"] as Node3D).rotation.x = c.z * SURFACE_DEFLECTION
+		(surfaces["Aileron_L"] as Node3D).rotation.x = c.z * AILERON_TRAVEL
 	for part in ["Elevator_L", "Elevator_R"]:
 		if surfaces.has(part):
-			(surfaces[part] as Node3D).rotation.x = -c.x * SURFACE_DEFLECTION
+			(surfaces[part] as Node3D).rotation.x = -c.x * ELEVATOR_TRAVEL
 	if surfaces.has("Rudder"):
-		(surfaces["Rudder"] as Node3D).rotation.y = c.y * SURFACE_DEFLECTION
+		(surfaces["Rudder"] as Node3D).rotation.y = c.y * RUDDER_TRAVEL
+	_measure_load(model, delta)
+	flap_amount = move_toward(flap_amount, flap_target(model.speed, felt_load, model.spec), FLAP_RATE * delta)
+	_pose_flaps()
+	_flex_wings(model.near_stall(), delta)
 	for flame in flames:
 		flame.emitting = model.boosting
 	for smoke in exhausts:
 		smoke.amount_ratio = 0.55 + model.throttle * 0.45
 	var vapour: float = TipTrail.vapour_strength(model.g_load, model.speed, float(model.spec.top_speed), float(model.spec.boost_speed))
 	for i in range(trails.size()):
-		trails[i].push(tips[i].get_global_transform_interpolated().origin, vapour, delta)
+		# The ribbon leaves the bent tip, not where the straight wing would end.
+		var tip: Transform3D = tips[i].get_global_transform_interpolated()
+		trails[i].push(tip.origin + tip.basis.y * flex_bend, vapour, delta)
 	if damage_trail != null:
 		damage_trail.push(get_global_transform_interpolated() * trail_anchor, model.hull_ratio(), delta)
 	_update_fire_glow()
@@ -230,6 +284,96 @@ func animate(model: FlightModel, delta: float) -> void:
 		for i in range(2):
 			engine_voices[i].pitch_scale = layers[i * 2] * voice_doppler
 			engine_voices[i].volume_db = 5.5 + linear_to_db(maxf(layers[i * 2 + 1], 0.001))
+
+
+## How far the flaps should be down, 0..1, for an aircraft of `spec` flying at
+## `speed` and pulling `load` g. Slow flight brings them fully down (all the way
+## at 1.2 times the stall speed, none above twice it). A turn drops them part way
+## as combat flaps, by how hard the aircraft is pulling compared with the hardest
+## pull it can make at that speed, so a firm turn shows them on every aircraft:
+## none in a gentle turn, COMBAT_FLAPS from COMBAT_FULL of the hardest pull. They
+## go no further than that below 80% of the aircraft's top speed, less and less
+## above it, and stay up at its boost speed.
+static func flap_target(speed: float, load: float, spec: Dictionary) -> float:
+	var stall: float = float(spec.stall)
+	var slow: float = clampf((stall * 2.0 - speed) / (stall * 0.8), 0.0, 1.0)
+	var hardest: float = float(spec.pitch_rate) * maxf(speed, stall) / FlightModel.GRAVITY
+	var pull: float = clampf(((load - 1.0) / hardest - COMBAT_FROM) / (COMBAT_FULL - COMBAT_FROM), 0.0, 1.0)
+	var boost: float = float(spec.boost_speed)
+	var fast: float = clampf((boost - speed) / (boost - float(spec.top_speed) * 0.8), 0.0, 1.0)
+	return maxf(slow, COMBAT_FLAPS * pull * fast)
+
+
+## How far the tips should rise, in metres, under `load` g for wings that rise
+## `flex` at FLEX_FULL_LOAD. Straight at 1 g, the shape they were built in.
+static func flex_target(load: float, flex: float) -> float:
+	return flex * clampf((load - 1.0) / (FLEX_FULL_LOAD - 1.0), FLEX_LEAST, 1.0)
+
+
+## The g the wings carry, measured from how the aircraft's motion changes, so it
+## works the same for aircraft copied from the network (they carry no g). Level
+## flight reads 1, a level 60° banked turn 2, a push over less than 1.
+func _measure_load(model: FlightModel, delta: float) -> void:
+	var v: Vector3 = model.velocity()
+	load_time += delta
+	if not load_measured:
+		last_velocity = v
+		load_measured = true
+		load_time = 0.0
+		return
+	if v == last_velocity:
+		return   # no new physics step since the last frame
+	var accel: Vector3 = (v - last_velocity) / maxf(load_time, 0.001)
+	var up: Vector3 = model.orientation * Vector3.UP
+	var load: float = clampf((accel + Vector3.UP * FlightModel.GRAVITY).dot(up) / FlightModel.GRAVITY, -5.0, 25.0)
+	# Smoothed over the time since the last measurement, not the frame: several
+	# frames are drawn per physics step on a fast display.
+	felt_load = lerpf(felt_load, load, 1.0 - exp(-load_time * 8.0))
+	last_velocity = v
+	load_time = 0.0
+
+
+## Bend the wings toward the load on a damped spring, with a shudder near the stall.
+func _flex_wings(buffeting: bool, delta: float) -> void:
+	if flex_meshes.is_empty():
+		return
+	var target: float = flex_target(felt_load, flex_tip)
+	var w: float = TAU * FLEX_FREQUENCY
+	var steps: int = ceili(delta / (1.0 / 120.0))
+	var h: float = delta / maxf(steps, 1)
+	for i in range(steps):
+		flex_speed += (w * w * (target - flex_bend) - 2.0 * FLEX_DAMPING * w * flex_speed) * h
+		flex_bend += flex_speed * h
+	var shown: float = flex_bend
+	if buffeting:
+		buffet_phase += delta
+		shown += BUFFET * (sin(buffet_phase * 41.0) * 0.6 + sin(buffet_phase * 67.0 + 1.3) * 0.4)
+	if absf(shown - flex_shown) < 0.001:
+		return   # settled: leave the meshes alone
+	flex_shown = shown
+	for i in range(flex_meshes.size()):
+		flex_meshes[i].set_blend_shape_value(flex_shapes[i], shown)
+
+
+## Swing the flaps down by `flap_amount`, sliding them back as they go so the slot
+## ahead of them opens and reads from above.
+func _pose_flaps() -> void:
+	for i in range(flaps.size()):
+		flaps[i].rotation.x = flap_amount * flap_angle
+		flaps[i].position = flap_rest[i] + Vector3(0.0, -0.2, 1.0) * flap_slide * flap_amount
+
+
+## Put the flaps up, the wings straight and the load back to 1 g (a new life).
+func reset_pose() -> void:
+	flap_amount = 0.0
+	flex_bend = 0.0
+	flex_speed = 0.0
+	flex_shown = 0.0
+	felt_load = 1.0
+	load_measured = false
+	_pose_flaps()
+	for i in range(flex_meshes.size()):
+		flex_meshes[i].set_blend_shape_value(flex_shapes[i], 0.0)
 
 
 ## How much larger than life an aircraft `apparent_distance` metres away is drawn

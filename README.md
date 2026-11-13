@@ -32,6 +32,21 @@ Real dimensions; balance is tuned for play, not history. The selection screen
 appears before each sortie (and from the pause menu); hovering a card plays that
 aircraft's engine.
 
+**Moving wings.** The ailerons, elevators and rudder follow the stick with more
+travel than the real aircraft used, and a dark slot opens at each hinge, so you
+can read them from the chase camera. The flaps come down by themselves: fully
+when the aircraft is slow (below twice its stall speed), and 60% of the way as
+combat flaps in a firm turn, judged against the hardest pull that aircraft can
+make, so they show alike on all three. They drop less above 80% of the aircraft's
+top speed and stay up at boost speed. The Mustang and Thunderbolt have hinged
+flaps on the trailing edge (40°) that slide back as they drop, opening a dark
+slot; the Spitfire has split flaps that drop from under the wing (60°). The wings
+bend upward with the load and spring back, overshooting slightly,
+when you ease off, and shudder near the stall. The Spitfire's thin wings bend most,
+the Thunderbolt's stiff ones least. All of this is visual only: it does not change
+how the aircraft flies. It is worked out from each aircraft's speed and motion, so
+other players' aircraft online show it too, with nothing extra sent.
+
 Each aircraft has five damage zones: engine, body, left wing, right wing and tail.
 A damaged engine loses power, holed wings roll slowly, a shot-up tail pitches and
 yaws slowly, and a badly hit aircraft trails smoke and then fire. The airframe
@@ -249,7 +264,7 @@ Everything is original or freely licensed; nothing is downloaded at build time
 |---|---|---|
 | Alpine Valley heightmap, shadows, forest mask, 158k tree positions | `tools/generate_terrain.py` (Python + NumPy/SciPy) | `game/assets/terrain/alpine_*` |
 | Plav & Gusinje: the same from surveyed elevations, plus gravel beds, brooks, reed beds, settlements and house positions | `source-assets/plav_dem.npz` → `tools/generate_plav.py` | `game/assets/terrain/plav_*`, `docs/plav_preview.png`, `docs/plav_layers.png` |
-| Spitfire Mk IX, P-51D Mustang, P-47D Thunderbolt (moving prop, ailerons, elevators, rudder; fictional markings) | `tools/build_aircraft.py` → `source-assets/{spitfire,mustang,thunderbolt}.blend` | `game/assets/models/*.glb` |
+| Spitfire Mk IX, P-51D Mustang, P-47D Thunderbolt (moving prop, ailerons, flaps, elevators, rudder, wings that bend; fictional markings) | `tools/build_aircraft.py` → `source-assets/{spitfire,mustang,thunderbolt}.blend` | `game/assets/models/*.glb` |
 | Conifers | `tools/build_trees.py` → `source-assets/trees.blend` | `game/assets/models/trees.glb` |
 | Three engines (two loops each), three guns (three takes each), gun jam, near miss, hits, explosion, wind (synthesised) | `tools/generate_audio.py` | `game/assets/audio/` |
 | Packages for Linux and Windows | `tools/build_release.sh` | `build/` |
@@ -303,7 +318,7 @@ gun heat (slowing, stopping, cooling), round scatter, tracer colours, near misse
 the engine sound mix, revs that follow climbs and dives, unclipped and
 uncompressed engine loops, the output limiter, fly-by pitch, the larger drawing of distant aircraft,
 hits and misses, time to kill per aircraft, damage zones and their effects, the
-slowdown of burning aircraft, the trail stages, health dots, bullet-hole placement, the target panel's fading, radar placement, and
+slowdown of burning aircraft, the trail stages, flaps and wing bending, health dots, bullet-hole placement, the target panel's fading, radar placement, and
 AI pilots hunting for three minutes without crashing. The Plav & Gusinje map is
 checked too: lake level, summit height and place, the route, the autopilot flying
 it end to end and AI pilots hunting over it without crashing.
@@ -318,7 +333,8 @@ flood limit, fading and wrapping, typing without losing the mouse).
 `tools/net_smoke.sh` plays a whole match between two headless copies of the game
 flown by the AI, each sending a chat line (`AIRFLIGHT_SERVER=1` for a dedicated
 server and two players). `game/tests/render_chat.gd` draws the chat over game
-screenshots for checking its look.
+screenshots for checking its look, and `game/tests/render_wings.gd` draws each
+aircraft with its flaps up and down and its wings straight and bent.
 
 For an unattended demo, `--ai-player` lets an AI fly and fight for you, and
 `--aircraft=0|1|2` skips the selection screen:

@@ -37,6 +37,7 @@ func _init() -> void:
 	_test_camera_up_settles()
 	_test_ai_hunts_without_crashing()
 	_test_tip_vapour_follows_class_speed()
+	_test_flaps_and_wing_flex()
 	_test_valley_path()
 	_test_volume_settings_persist()
 	# The second map: same terrain, route and AI checks on its own data.
@@ -805,6 +806,99 @@ func _test_tip_vapour_follows_class_speed() -> void:
 		ok = ok and cruise == 0.0 and at_top > 0.1 and at_boost > at_top * 2.0
 	check(ok, "every class shows tip vapour near its own top speed, none at cruise")
 	check(is_equal_approx(TipTrail.vapour_strength(6.0, 100.0, 172.0, 205.0), 1.0), "a hard pull gives the full tip ribbon at any speed")
+
+
+## Flaps drop when slow and part way in a firm turn on every aircraft, the same
+## way at any frame rate, and swing down on both wings; the wings bend upward
+## under load and straighten in level flight.
+func _test_flaps_and_wing_flex() -> void:
+	check(Aircraft.flex_target(1.0, 0.28) == 0.0 and is_equal_approx(Aircraft.flex_target(Aircraft.FLEX_FULL_LOAD, 0.28), 0.28)
+		and Aircraft.flex_target(30.0, 0.28) <= 0.28, "wings are straight at 1 g and bend their full amount in the hardest pull")
+	check(Aircraft.flex_target(-1.0, 0.28) < 0.0, "pushing below 1 g bends them down")
+	for id in [Airframes.Id.SPITFIRE, Airframes.Id.MUSTANG, Airframes.Id.THUNDERBOLT]:
+		var s: Dictionary = Airframes.spec(id)
+		var name: String = String(s.short)
+		var stall: float = float(s.stall)
+		var top: float = float(s.top_speed)
+		var boost: float = float(s.boost_speed)
+		# The load of a pull at `share` of the hardest the aircraft can make at `speed`.
+		var pull: Callable = func(speed: float, share: float) -> float:
+			return 1.0 + share * float(s.pitch_rate) * speed / FlightModel.GRAVITY
+		check(Aircraft.flap_target(top * 0.82, 1.0, s) == 0.0 and Aircraft.flap_target(top, 1.0, s) == 0.0, "%s flaps stay up in level flight at cruise and top speed" % name)
+		check(Aircraft.flap_target(stall * 1.2, 1.0, s) == 1.0 and Aircraft.flap_target(stall * 2.0, 1.0, s) == 0.0, "%s flaps are fully down near the stall" % name)
+		check(Aircraft.flap_target(top * 0.8, pull.call(top * 0.8, 0.08), s) == 0.0, "%s flaps stay up in a gentle turn" % name)
+		var firm: float = Aircraft.flap_target(top * 0.8, pull.call(top * 0.8, 0.5), s)
+		var hard: float = Aircraft.flap_target(top * 0.8, pull.call(top * 0.8, 1.0), s)
+		check(is_equal_approx(firm, Aircraft.COMBAT_FLAPS) and is_equal_approx(hard, Aircraft.COMBAT_FLAPS), "%s flaps drop part way in a firm turn and no further in the hardest (%.2f, %.2f)" % [name, firm, hard])
+		var at_top: float = Aircraft.flap_target(top, pull.call(top, 1.0), s)
+		check(at_top > 0.2 and at_top < firm, "%s flaps drop less in a hard turn at top speed (%.2f)" % [name, at_top])
+		check(Aircraft.flap_target(boost, pull.call(boost, 1.0), s) == 0.0, "%s flaps stay up at boost speed" % name)
+		check(Aircraft.flap_target(top * 0.8, -3.0, s) == 0.0, "%s flaps stay up when pushing" % name)
+
+		var a: Aircraft = Aircraft.new()
+		root.add_child(a)
+		a.build(s, 0, false)
+		check(a.flaps.size() >= 2 and a.flaps.size() % 2 == 0 and a.flex_meshes.size() >= 10, "%s has flaps on both wings and bending wing parts" % name)
+		var up: Dictionary = _flap_low_points(a)
+		a.flap_amount = 1.0
+		a._pose_flaps()
+		var down: Dictionary = _flap_low_points(a)
+		a.reset_pose()
+		var least: float = INF
+		var uneven: float = 0.0
+		for flap: String in up:
+			least = minf(least, float(up[flap]) - float(down[flap]))
+			if flap.contains("_L_"):
+				uneven = maxf(uneven, absf(float(down[flap]) - float(down[flap.replace("_L_", "_R_")])))
+		check(least > 0.35 and uneven < 0.01, "%s flaps swing down on both wings alike (at least %.2f m, %.3f m apart)" % [name, least, uneven])
+
+		# A firm level turn, drawn at 60 and at 240 frames a second.
+		var seen: Array[float] = []
+		for frames: int in [1, 4]:
+			a.reset_pose()
+			var m: FlightModel = _model(id)
+			var cmd: FlightCommand = FlightCommand.new()
+			var most: float = 0.0
+			var hardest: float = 0.0
+			for i in range(180):
+				var f: Vector3 = m.forward()
+				cmd.aim_direction = Vector3(f.x, 0.0, f.z).normalized().rotated(Vector3.UP, -deg_to_rad(15.0))   # held 15 degrees to the right
+				m.step(cmd, 1.0 / 60.0, terrain)
+				for k in range(frames):
+					a.animate(m, 1.0 / (60.0 * frames))
+				most = maxf(most, a.flex_bend)
+				hardest = maxf(hardest, a.felt_load)
+				if i == 59:
+					seen.append(a.felt_load)
+			if frames == 1:
+				check(hardest > 2.0 and most > 0.5 * float(s.flex), "%s wings bend up in a firm turn (%.1f g, tips %.2f m)" % [name, hardest, most])
+				check(a.flap_amount > Aircraft.COMBAT_FLAPS - 0.05 and a.flap_amount < Aircraft.COMBAT_FLAPS + 0.01, "%s flaps are part way down in a firm turn (%.2f)" % [name, a.flap_amount])
+				cmd.aim_direction = m.forward() * Vector3(1.0, 0.0, 1.0)
+				for i in range(360):
+					m.step(cmd, 1.0 / 60.0, terrain)
+					a.animate(m, 1.0 / 60.0)
+				check(absf(a.felt_load - 1.0) < 0.25 and absf(a.flex_bend) < 0.03, "%s wings settle straight in level flight (%.2f g, tips %.3f m)" % [name, a.felt_load, a.flex_bend])
+				check(a.flap_amount == 0.0, "%s flaps go back up in level flight" % name)
+		check(absf(seen[0] - seen[1]) < 0.08 * seen[0], "%s wings feel the same load at 60 and 240 frames a second (%.1f g, %.1f g)" % [name, seen[0], seen[1]])
+		a.free()
+
+
+## The lowest point of each flap, by name, in the aircraft's own space.
+func _flap_low_points(a: Aircraft) -> Dictionary:
+	var out: Dictionary = {}
+	for flap in a.flaps:
+		var mesh_instance: MeshInstance3D = flap
+		var to_aircraft: Transform3D = Transform3D.IDENTITY
+		var n: Node = flap
+		while n != a:
+			to_aircraft = (n as Node3D).transform * to_aircraft
+			n = n.get_parent()
+		var low: float = INF
+		for surface in range(mesh_instance.mesh.get_surface_count()):
+			for v: Vector3 in mesh_instance.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]:
+				low = minf(low, (to_aircraft * v).y)
+		out[String(flap.name)] = low
+	return out
 
 
 ## Volumes survive a save and reload, and drive their own audio buses.

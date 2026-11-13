@@ -12,10 +12,12 @@ the nose. Overall sizes follow the real aircraft:
   North American P-51D Mustang   span 11.28 m, length 9.83 m, belly radiator
   Republic P-47D Thunderbolt     span 12.43 m, length 11.0 m, radial engine
 Markings are fictional. Paint is applied in the game by the skin shader. Moving
-parts (propeller, ailerons, elevators, rudder) have their origin on their
-rotation axis so the game can animate them. Every model exposes the same named
-parts and empties (Propeller, Aileron_L/R, Elevator_L/R, Rudder, Muzzle_L/R,
-ExhaustPort_L/R, WingTip_L/R, CameraTarget).
+parts (propeller, ailerons, flaps, elevators, rudder) have their origin on their
+rotation axis so the game can animate them, and every wing part carries a "Flex"
+shape key (the wing bent upward, 1 m at the tip) for the game to bend the wings
+under load. Every model exposes the same named parts and empties (Propeller,
+Aileron_L/R, Flap_L_n/Flap_R_n, Elevator_L/R, Rudder, Muzzle_L/R, ExhaustPort_L/R,
+WingTip_L/R, CameraTarget).
 """
 from __future__ import annotations
 
@@ -214,9 +216,11 @@ def airfoil(u_from, u_to, count, thickness, camber=0.015):
     return upper + lower
 
 
-def surface_loft(name, stations, u_from, u_to, mats_fn, pivot=(0, 0, 0), count=14, mirror=False, vertical=False):
+def surface_loft(name, stations, u_from, u_to, mats_fn, pivot=(0, 0, 0), count=14, mirror=False, vertical=False, cut_mat=None):
     """stations: (span, le, chord, base, thickness). Horizontal: span=x, base=y.
-    Vertical (fin): span=y, base=x."""
+    Vertical (fin): span=y, base=x. cut_mat paints the face where a surface is
+    cut along a hinge line (the front of a moving surface, the back of the fixed
+    part ahead of it), so the slot shows dark when the surface moves."""
     rings = []
     for span, le, chord, base, thick in stations:
         ring = []
@@ -230,7 +234,52 @@ def surface_loft(name, stations, u_from, u_to, mats_fn, pivot=(0, 0, 0), count=1
         rings.append(ring)
     verts, faces = loft(rings)
     mats = [mats_fn(*centroid(verts, f)) for f in faces]
+    m = len(rings[0])
+    cut = count - 1 if u_from > 0.0 else (m - 1 if u_to < 1.0 else None)
+    if cut_mat is not None and cut is not None:
+        for r in range(len(rings) - 1):
+            mats[r * m + cut] = cut_mat
     return make_mesh(name, verts, faces, mats, pivot=pivot, smooth_angle=55)
+
+
+def flap_plate(name, stations, u_from, u_to, lower_y, pivot, mirror=False):
+    """Thin split-flap plate lying against the underside of the wing."""
+    rings = []
+    us = linspace(u_from, u_to, 5)
+    for x, le, chord, _, _ in stations:
+        sx = -x if mirror else x
+        top = [(sx, lower_y(x, u) - 0.003, le + u * chord) for u in us]
+        bottom = [(sx, lower_y(x, u) - 0.003 - 0.018 * (1.0 - 0.6 * (u - u_from) / (u_to - u_from)), le + u * chord) for u in reversed(us)]
+        rings.append(top + bottom)
+    verts, faces = loft(rings)
+    # The face against the wing is bare metal, seen only with the flap down.
+    m = len(rings[0])
+    mats = ["frame" if k < (len(rings) - 1) * m and k % m < len(us) - 1 else "skin" for k in range(len(faces))]
+    return make_mesh(name, verts, faces, mats, pivot=pivot, smooth_angle=40)
+
+
+# Parts that bend with the wing (see add_wing_flex).
+FLEX_PARTS = ("Wing_", "Aileron_", "Flap_", "Gun_", "NavLight_", "Roundel_Wing_", "Radiator_", "Pitot")
+
+
+def add_wing_flex(root_x, half_span):
+    """Give every wing part a "Flex" shape key: the wing bent upward as a
+    cantilever under an even load, 1 m at the tip, nothing inboard of root_x.
+    The game sets its weight to the bend it wants, in metres at the tip."""
+    bpy.context.view_layer.update()
+    for ob in list(COLLECTION.objects):
+        if ob.type != "MESH" or not ob.name.startswith(FLEX_PARTS):
+            continue
+        world = ob.matrix_world.copy()
+        to_local = world.to_3x3().inverted()
+        ob.shape_key_add(name="Basis", from_mix=False)
+        key = ob.shape_key_add(name="Flex", from_mix=False)
+        key.value = 0.0   # exported as the default weight: straight wings
+        for i, v in enumerate(ob.data.vertices):
+            x = abs((world @ v.co).x)
+            s = min(max((x - root_x) / (half_span - root_x), 0.0), 1.0)
+            rise = s * s * (6.0 - 4.0 * s + s * s) / 3.0
+            key.data[i].co = v.co + to_local @ Vector((0.0, 0.0, rise))
 
 
 def disc_rings(cx, cz, radii, project):
@@ -313,25 +362,53 @@ class Airframe:
         yt = 5 * thick * (0.2969 * math.sqrt(u) - 0.1260 * u - 0.3516 * u ** 2 + 0.2843 * u ** 3 - 0.1036 * u ** 4)
         return base + (yc + yt) * chord
 
+    def lower_surface_y(self, x, u):
+        le, chord, base, thick = self.wing(abs(x))
+        p = 0.4
+        yc = 0.015 / p ** 2 * (2 * p * u - u * u) if u < p else 0.015 / (1 - p) ** 2 * ((1 - 2 * p) + 2 * p * u - u * u)
+        yt = 5 * thick * (0.2969 * math.sqrt(u) - 0.1260 * u - 0.3516 * u ** 2 + 0.2843 * u ** 3 - 0.1036 * u ** 4)
+        return base + (yc - yt) * chord
+
     def build_wings(self):
         p = self.p
         a_in, a_out, a_u = p["aileron"]
+        f = p["flaps"]
+        f_u, spans = f["u"], f["spans"]
+        f_in = spans[0][0]
         b = self.half_span
         st = p.get("wing_stations", {})
-        inner = st.get("inner", linspace(0.0, a_in, 7))
+        root = linspace(0.0, f_in, 3)
+        inner = linspace(f_in, a_in, 7)
         outer = st.get("outer", linspace(a_in, a_out, 6))
         tip = st.get("tip", toward_tip(a_out, b - 0.01, 9))
         ail = st.get("aileron", linspace(a_in + 0.02, a_out - 0.02, 5))
         skin = lambda x, y, z: "skin"
         for side, mirror in (("R", False), ("L", True)):
-            surface_loft(f"Wing_{side}_Inner", [self.wing_station(x) for x in inner], 0.0, 1.0, skin, mirror=mirror)
-            surface_loft(f"Wing_{side}_Outer", [self.wing_station(x) for x in outer], 0.0, a_u, skin, mirror=mirror)
+            sx = -1.0 if mirror else 1.0
+            surface_loft(f"Wing_{side}_Root", [self.wing_station(x) for x in root], 0.0, 1.0, skin, mirror=mirror)
+            if f["split"]:
+                # Split flaps: the wing keeps its full section, a plate drops from its underside.
+                surface_loft(f"Wing_{side}_Inner", [self.wing_station(x) for x in inner], 0.0, 1.0, skin, mirror=mirror)
+            else:
+                surface_loft(f"Wing_{side}_Inner", [self.wing_station(x) for x in inner], 0.0, f_u, skin, mirror=mirror, cut_mat="dark")
+            surface_loft(f"Wing_{side}_Outer", [self.wing_station(x) for x in outer], 0.0, a_u, skin, mirror=mirror, cut_mat="dark")
             surface_loft(f"Wing_{side}_Tip", [self.wing_station(x) for x in tip], 0.0, 1.0, skin, mirror=mirror)
             # Aileron: origin on the hinge line, mid-span.
             xm = (a_in + a_out) / 2
             le, chord, base, _ = self.wing(xm)
-            hinge = ((-xm if mirror else xm), base + 0.012 * chord, le + a_u * chord)
-            surface_loft(f"Aileron_{side}", [self.wing_station(x) for x in ail], a_u, 1.0, skin, pivot=hinge, mirror=mirror)
+            hinge = (sx * xm, base + 0.012 * chord, le + a_u * chord)
+            surface_loft(f"Aileron_{side}", [self.wing_station(x) for x in ail], a_u, 1.0, skin, pivot=hinge, mirror=mirror, cut_mat="dark")
+            # Flaps: origin on a hinge line along the underside of the wing.
+            for k, (x0, x1) in enumerate(spans):
+                xs = linspace(x0 + 0.02, x1 - 0.02, 5)
+                xm = (x0 + x1) / 2
+                le, chord, _, _ = self.wing(xm)
+                hinge = (sx * xm, self.lower_surface_y(xm, f_u), le + f_u * chord)
+                stations = [self.wing_station(x) for x in xs]
+                if f["split"]:
+                    flap_plate(f"Flap_{side}_{k}", stations, f_u, 0.97, self.lower_surface_y, hinge, mirror=mirror)
+                else:
+                    surface_loft(f"Flap_{side}_{k}", stations, f_u, 1.0, skin, pivot=hinge, mirror=mirror, cut_mat="dark")
 
     # ----------------------------------------------------------------- tail
     def build_tail(self):
@@ -344,10 +421,10 @@ class Airframe:
         xm = st.get("hinge_x", span * 0.5)
         skin = lambda x, y, z: "skin"
         for side, mirror in (("R", False), ("L", True)):
-            surface_loft(f"Stabilizer_{side}", [tail(x) for x in stab], 0.0, elev_u, skin, mirror=mirror)
+            surface_loft(f"Stabilizer_{side}", [tail(x) for x in stab], 0.0, elev_u, skin, mirror=mirror, cut_mat="dark")
             ts = tail(xm)
             hinge = ((-xm if mirror else xm), base_y, ts[1] + elev_u * ts[2])
-            surface_loft(f"Elevator_{side}", [tail(x) for x in elev], elev_u, 1.0, skin, pivot=hinge, mirror=mirror)
+            surface_loft(f"Elevator_{side}", [tail(x) for x in elev], elev_u, 1.0, skin, pivot=hinge, mirror=mirror, cut_mat="dark")
 
         fin = p["fin"]
         root, top = p["fin_root"], p["fin_top"]
@@ -357,10 +434,10 @@ class Airframe:
         fin_ys = fst.get("fin", toward_tip(root, top - 0.01, 8))
         rud_ys = fst.get("rudder", linspace(root + 0.02, root + (top - root) * 0.9, 5))
         ym = fst.get("hinge_y", root + (top - root) * 0.46)
-        surface_loft("Fin", [fin(y) for y in fin_ys], 0.0, rud_u, fin_mats, vertical=True)
+        surface_loft("Fin", [fin(y) for y in fin_ys], 0.0, rud_u, fin_mats, vertical=True, cut_mat="dark")
         fs = fin(ym)
         surface_loft("Rudder", [fin(y) for y in rud_ys], rud_u, 1.0, fin_mats,
-                     pivot=(0.0, ym, fs[1] + rud_u * fs[2]), vertical=True)
+                     pivot=(0.0, ym, fs[1] + rud_u * fs[2]), vertical=True, cut_mat="dark")
         fillet = p.get("dorsal_fillet")
         if fillet:
             # Thin blade blending the fin into the spine.
@@ -577,7 +654,8 @@ def mustang() -> dict:
         "half_span": half_span,
         "wing": wing,
         "aileron": (3.05, 5.25, 0.76),
-        "wing_stations": {"inner": (0.0, 0.5, 1.2, 2.0, 2.6, 3.05), "outer": (3.05, 3.6, 4.2, 4.7, 5.25),
+        "flaps": {"u": 0.75, "spans": [(0.55, 3.03)], "split": False},
+        "wing_stations": {"outer": (3.05, 3.6, 4.2, 4.7, 5.25),
                           "tip": (5.25, 5.38, 5.5, 5.58, 5.63), "aileron": (3.07, 3.8, 4.5, 5.23)},
         "tail": tail, "tail_span": tail_span, "elevator_u": 0.62, "tail_y": 0.20,
         "tail_stations": {"stab": (0.0, 0.4, 1.0, 1.55, 1.8, 1.95, 2.06), "elevator": (0.22, 0.8, 1.4, 1.75), "hinge_x": 1.0},
@@ -669,6 +747,8 @@ def spitfire() -> dict:
         "half_span": half_span,
         "wing": wing,
         "aileron": (3.00, 5.05, 0.78),
+        # Split flaps under the inner wing, either side of the radiator.
+        "flaps": {"u": 0.72, "spans": [(0.50, 1.07), (1.65, 2.98)], "split": True},
         "tail": tail, "tail_span": tail_span, "elevator_u": 0.56, "tail_y": 0.30,
         "tail_stations": {"elevator": linspace(0.20, 1.50, 6), "hinge_x": 0.8},
         "fin": fin, "fin_root": fin_root, "fin_top": fin_top, "rudder_u": 0.46,
@@ -759,6 +839,7 @@ def thunderbolt() -> dict:
         "half_span": half_span,
         "wing": wing,
         "aileron": (3.45, 5.70, 0.76),
+        "flaps": {"u": 0.73, "spans": [(0.72, 3.43)], "split": False},
         "tail": tail, "tail_span": tail_span, "elevator_u": 0.60, "tail_y": 0.38,
         "tail_stations": {"elevator": linspace(0.24, 2.25, 6), "hinge_x": 1.2},
         "fin": fin, "fin_root": fin_root, "fin_top": fin_top, "rudder_u": 0.56,
@@ -817,6 +898,7 @@ def main() -> None:
             continue
         reset_scene()
         Airframe(plane).build()
+        add_wing_flex(plane["flaps"]["spans"][0][0] - 0.05, plane["half_span"])
         bpy.ops.wm.save_as_mainfile(filepath=str(ROOT / f"source-assets/{name}.blend"))
         bpy.ops.export_scene.gltf(filepath=str(ROOT / f"game/assets/models/{name}.glb"), export_format="GLB",
                                   export_apply=True, export_yup=True, export_extras=False)

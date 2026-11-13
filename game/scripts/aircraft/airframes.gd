@@ -11,7 +11,11 @@ extends RefCounted
 ## (`zoom`, times), so the big aircraft are the long-range shots. Guns overheat
 ## after `gun_heat_time` seconds of unbroken fire (see FlightModel): the heavier
 ## the battery, the sooner. `engine_sound` and `gun_sound` name groups of files
-## (see Sfx.engine_loop and Sfx.gun_stream).
+## (see Sfx.engine_loop and Sfx.gun_stream). `flap_angle` is how far the flaps
+## drop, in degrees (the Spitfire's are split flaps under the wing, so they swing
+## further), `flap_slide` how far back the hinged ones slide as they drop, in
+## metres, and `flex` how far the wingtips rise in the hardest pull, in metres
+## (see Aircraft: purely visual).
 
 enum Id { SPITFIRE, MUSTANG, THUNDERBOLT }
 enum Zone { ENGINE, BODY, WING_L, WING_R, TAIL }
@@ -30,7 +34,7 @@ const SPECS: Array[Dictionary] = [
 		"pitch_rate": 1.75, "roll_rate": 4.4, "yaw_rate": 0.42, "response": 7.0,
 		"gun_damage": 8.0, "fire_rate": 12.0, "gun_heat_time": 8.0, "target_scale": 0.9, "zoom": 3.0,
 		"muzzles": [Vector3(-1.92, -0.19, -2.14), Vector3(1.92, -0.19, -2.14)],
-		"prop_radius": 1.63, "engine_z": -1.25, "tail_z": 3.0, "body_half_width": 0.6, "smoke_z": -2.4,
+		"flap_angle": 60.0, "flap_slide": 0.0, "flex": 0.34, "prop_radius": 1.63, "engine_z": -1.25, "tail_z": 3.0, "body_half_width": 0.6, "smoke_z": -2.4,
 		"paint": {"base_color": Color(0.33, 0.37, 0.40), "paint_b": Color(0.19, 0.25, 0.16), "camo": 1.0,
 			"underside_color": Color(0.56, 0.60, 0.64), "underside": 1.0, "metallic": 0.05, "roughness": 0.52, "stain_strength": 0.6}},
 	{"name": "P-51D Mustang", "short": "MUSTANG", "class": "MEDIUM", "origin": "North American · USA · 1944",
@@ -42,7 +46,7 @@ const SPECS: Array[Dictionary] = [
 		"pitch_rate": 1.5, "roll_rate": 3.8, "yaw_rate": 0.36, "response": 6.0,
 		"gun_damage": 10.0, "fire_rate": 13.0, "gun_heat_time": 7.0, "target_scale": 1.0, "zoom": 4.0,
 		"muzzles": [Vector3(-2.22, -0.18, -1.02), Vector3(2.22, -0.18, -1.02)],
-		"prop_radius": 1.70, "engine_z": -1.35, "tail_z": 3.2, "body_half_width": 0.62, "smoke_z": -2.6,
+		"flap_angle": 40.0, "flap_slide": 0.16, "flex": 0.28, "prop_radius": 1.70, "engine_z": -1.35, "tail_z": 3.2, "body_half_width": 0.62, "smoke_z": -2.6,
 		"paint": {"base_color": Color(0.74, 0.76, 0.78), "paint_b": Color(0.74, 0.76, 0.78), "camo": 0.0,
 			"underside_color": Color(0.74, 0.76, 0.78), "underside": 0.0, "metallic": 0.92, "roughness": 0.30, "stain_strength": 1.0}},
 	{"name": "P-47D Thunderbolt", "short": "THUNDERBOLT", "class": "HEAVY", "origin": "Republic · USA · 1943",
@@ -54,7 +58,7 @@ const SPECS: Array[Dictionary] = [
 		"pitch_rate": 1.25, "roll_rate": 3.1, "yaw_rate": 0.30, "response": 5.0,
 		"gun_damage": 14.0, "fire_rate": 14.0, "gun_heat_time": 6.0, "target_scale": 1.15, "zoom": 6.0,
 		"muzzles": [Vector3(-2.89, -0.27, -2.59), Vector3(2.89, -0.27, -2.59)],
-		"prop_radius": 1.98, "engine_z": -2.3, "tail_z": 3.6, "body_half_width": 0.8, "smoke_z": -3.4,
+		"flap_angle": 40.0, "flap_slide": 0.2, "flex": 0.24, "prop_radius": 1.98, "engine_z": -2.3, "tail_z": 3.6, "body_half_width": 0.8, "smoke_z": -3.4,
 		"paint": {"base_color": Color(0.25, 0.26, 0.15), "paint_b": Color(0.31, 0.31, 0.20), "camo": 0.6,
 			"underside_color": Color(0.47, 0.49, 0.51), "underside": 1.0, "metallic": 0.05, "roughness": 0.6, "stain_strength": 0.0}},
 ]
