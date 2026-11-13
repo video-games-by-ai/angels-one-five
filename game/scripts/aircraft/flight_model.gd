@@ -9,6 +9,7 @@ extends RefCounted
 
 const GRAVITY: float = 9.81
 const TREE_HEIGHT: float = 17.0
+const MAX_HIT_MARKS: int = 48   ## bullet holes kept for the damage panels; the oldest go first
 
 var frame_id: int = Airframes.Id.MUSTANG
 var spec: Dictionary = Airframes.spec(Airframes.Id.MUSTANG)
@@ -27,6 +28,7 @@ var hull: float = 100.0
 var zone_health: PackedFloat32Array = PackedFloat32Array([1.0, 1.0, 1.0, 1.0, 1.0])  ## Airframes.Zone order
 var gun_cooldown: float = 0.0
 var firing: bool = false
+var hit_marks: PackedVector2Array = PackedVector2Array()  ## where rounds struck, planform x, z in metres, oldest first
 
 
 func setup(id: int, spawn: Vector3, heading: float) -> void:
@@ -43,6 +45,7 @@ func setup(id: int, spawn: Vector3, heading: float) -> void:
 	alive = true
 	hull = float(spec.hull)
 	zone_health = PackedFloat32Array([1.0, 1.0, 1.0, 1.0, 1.0])
+	hit_marks.clear()
 	gun_cooldown = 0.0
 	firing = false
 	g_load = 1.0
@@ -194,6 +197,14 @@ func apply_damage(amount: float, zone: int) -> bool:
 		alive = false
 		return true
 	return false
+
+
+## Remember a bullet hole in `zone` at planform position `spot` (x, z), drawn on
+## the damage panels. Spots outside the zone's outline are pulled onto it.
+func mark_hit(zone: int, spot: Vector2) -> void:
+	hit_marks.append(AirframeOutline.place_hit(frame_id, zone, spot))
+	if hit_marks.size() > MAX_HIT_MARKS:
+		hit_marks.remove_at(0)
 
 
 ## Seconds until ground impact on the current path, or INF.

@@ -138,3 +138,71 @@ static func zones(id: int) -> Array[PackedVector2Array]:
 static func extent(id: int) -> Vector3:
 	var profile: Array = FUSELAGES[id]
 	return Vector3((profile[0] as Vector2).x, (profile[profile.size() - 1] as Vector2).x + 0.05, HALF_SPANS[id])
+
+
+static var _zone_cache: Dictionary = {}   ## airframe id -> zones(id)
+static var _anchor_cache: Dictionary = {} ## airframe id -> one point inside each zone
+
+
+## zones(id), built once per aircraft type.
+static func cached_zones(id: int) -> Array[PackedVector2Array]:
+	if not _zone_cache.has(id):
+		_zone_cache[id] = zones(id)
+	return _zone_cache[id]
+
+
+## A point well inside each zone polygon, used to pull stray hits back in.
+static func anchors(id: int) -> PackedVector2Array:
+	if _anchor_cache.has(id):
+		return _anchor_cache[id]
+	var out: PackedVector2Array = PackedVector2Array()
+	for poly in cached_zones(id):
+		var centre: Vector2 = Vector2.ZERO
+		for p in poly:
+			centre += p
+		centre /= float(poly.size())
+		if not Geometry2D.is_point_in_polygon(centre, poly):
+			# A bent shape (the tail): halfway to the vertex that lands inside.
+			for p in poly:
+				var trial: Vector2 = centre.lerp(p, 0.5)
+				if Geometry2D.is_point_in_polygon(trial, poly):
+					centre = trial
+					break
+		out.append(centre)
+	_anchor_cache[id] = out
+	return out
+
+
+## Where a round that struck `zone` at planform position `spot` (x, z in metres)
+## shows on the outline. The hit sphere is larger than the aircraft, so a spot
+## outside the zone is pulled in toward the zone's middle until it lands on the skin.
+static func place_hit(id: int, zone: int, spot: Vector2) -> Vector2:
+	var poly: PackedVector2Array = cached_zones(id)[zone]
+	if Geometry2D.is_point_in_polygon(spot, poly):
+		return spot
+	var anchor: Vector2 = anchors(id)[zone]
+	var inside: float = 0.0
+	var outside: float = 1.0
+	for i in range(10):
+		var mid: float = (inside + outside) * 0.5
+		if Geometry2D.is_point_in_polygon(anchor.lerp(spot, mid), poly):
+			inside = mid
+		else:
+			outside = mid
+	return anchor.lerp(spot, inside * 0.9)
+
+
+## A random spot inside `zone`, for hits that arrive with only their zone known
+## (rounds fired by other players online).
+static func random_spot(id: int, zone: int, rng: RandomNumberGenerator) -> Vector2:
+	var poly: PackedVector2Array = cached_zones(id)[zone]
+	var low: Vector2 = Vector2(INF, INF)
+	var high: Vector2 = Vector2(-INF, -INF)
+	for p in poly:
+		low = low.min(p)
+		high = high.max(p)
+	for i in range(40):
+		var trial: Vector2 = Vector2(rng.randf_range(low.x, high.x), rng.randf_range(low.y, high.y))
+		if Geometry2D.is_point_in_polygon(trial, poly):
+			return trial
+	return anchors(id)[zone]

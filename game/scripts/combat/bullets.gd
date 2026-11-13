@@ -64,7 +64,8 @@ func fire(shooter: int, team: int, origin: Vector3, direction: Vector3, carrier_
 
 
 ## Advance all rounds one fixed step. Returns impacts: aircraft hits carry
-## {target, shooter, point, zone, damage}, ground strikes carry {ground, point}.
+## {target, shooter, point, local, zone, damage} (`local` is the strike point in
+## the target's own space), ground strikes carry {ground, point}.
 ## Damage is not applied here; the caller decides what a hit does.
 func step(dt: float, terrain: TerrainData, targets: Array[Combatant]) -> Array[Dictionary]:
 	var impacts: Array[Dictionary] = []
@@ -90,7 +91,7 @@ func step(dt: float, terrain: TerrainData, targets: Array[Combatant]) -> Array[D
 			var u: float = clampf(-a_s.dot(d_s) / maxf(d_s.length_squared(), 0.0001), 0.0, 1.0)
 			if (a_s + d_s * u).length_squared() < target.hit_radius * target.hit_radius:
 				var local: Vector3 = a.lerp(b, u)
-				impacts.append({"target": target, "shooter": shooters[i], "point": p0.lerp(p1, u),
+				impacts.append({"target": target, "shooter": shooters[i], "point": p0.lerp(p1, u), "local": local,
 					"zone": Airframes.zone_at(target.model.spec, local), "damage": damages[i]})
 				spent = true
 				break

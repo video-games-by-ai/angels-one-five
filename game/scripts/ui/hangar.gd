@@ -241,7 +241,7 @@ func _card(id: int) -> PanelContainer:
 		box.add_child(bar)
 
 	box.add_child(_label("ENGINE   " + String(spec.engine_label), 14, DIM, false, HORIZONTAL_ALIGNMENT_LEFT))
-	box.add_child(_label("GUNS   " + String(spec.guns_label), 14, DIM, false, HORIZONTAL_ALIGNMENT_LEFT))
+	box.add_child(_label("GUNS   %s · %s sight" % [String(spec.guns_label), Airframes.zoom_label(float(spec.zoom))], 14, DIM, false, HORIZONTAL_ALIGNMENT_LEFT))
 	var fly: Button = Button.new()
 	fly.text = "FLY THE " + String(spec.short)
 	fly.custom_minimum_size = Vector2(0, 46)

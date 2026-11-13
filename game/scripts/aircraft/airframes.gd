@@ -7,7 +7,8 @@ extends RefCounted
 ## The three are real 1940s fighters, balanced for play rather than history:
 ## the Spitfire is quick and nimble but lightly armed and fragile, the Mustang is
 ## the all-rounder, the Thunderbolt is slow to turn but hits hardest and absorbs
-## the most punishment.
+## the most punishment. The heavier the guns, the further the gunsight zooms
+## (`zoom`, times), so the big aircraft are the long-range shots.
 
 enum Id { SPITFIRE, MUSTANG, THUNDERBOLT }
 enum Zone { ENGINE, BODY, WING_L, WING_R, TAIL }
@@ -24,7 +25,7 @@ const SPECS: Array[Dictionary] = [
 		"gun_sound": "res://assets/audio/gun_light.wav", "gun_pitch": 1.0,
 		"hull": 80.0, "top_speed": 172.0, "boost_speed": 205.0, "stall": 48.0, "thrust": 15.5,
 		"pitch_rate": 1.75, "roll_rate": 4.4, "yaw_rate": 0.42, "response": 7.0,
-		"gun_damage": 8.0, "fire_rate": 12.0, "target_scale": 0.9,
+		"gun_damage": 8.0, "fire_rate": 12.0, "target_scale": 0.9, "zoom": 3.0,
 		"muzzles": [Vector3(-1.92, -0.19, -2.14), Vector3(1.92, -0.19, -2.14)],
 		"prop_radius": 1.63, "engine_z": -1.25, "tail_z": 3.0, "body_half_width": 0.6, "smoke_z": -2.4,
 		"paint": {"base_color": Color(0.33, 0.37, 0.40), "paint_b": Color(0.19, 0.25, 0.16), "camo": 1.0,
@@ -36,7 +37,7 @@ const SPECS: Array[Dictionary] = [
 		"gun_sound": "res://assets/audio/gun_medium.wav", "gun_pitch": 1.0,
 		"hull": 100.0, "top_speed": 162.0, "boost_speed": 192.0, "stall": 50.0, "thrust": 14.0,
 		"pitch_rate": 1.5, "roll_rate": 3.8, "yaw_rate": 0.36, "response": 6.0,
-		"gun_damage": 10.0, "fire_rate": 13.0, "target_scale": 1.0,
+		"gun_damage": 10.0, "fire_rate": 13.0, "target_scale": 1.0, "zoom": 4.0,
 		"muzzles": [Vector3(-2.22, -0.18, -1.02), Vector3(2.22, -0.18, -1.02)],
 		"prop_radius": 1.70, "engine_z": -1.35, "tail_z": 3.2, "body_half_width": 0.62, "smoke_z": -2.6,
 		"paint": {"base_color": Color(0.74, 0.76, 0.78), "paint_b": Color(0.74, 0.76, 0.78), "camo": 0.0,
@@ -48,7 +49,7 @@ const SPECS: Array[Dictionary] = [
 		"gun_sound": "res://assets/audio/gun_heavy.wav", "gun_pitch": 1.0,
 		"hull": 135.0, "top_speed": 150.0, "boost_speed": 178.0, "stall": 54.0, "thrust": 12.5,
 		"pitch_rate": 1.25, "roll_rate": 3.1, "yaw_rate": 0.30, "response": 5.0,
-		"gun_damage": 14.0, "fire_rate": 14.0, "target_scale": 1.15,
+		"gun_damage": 14.0, "fire_rate": 14.0, "target_scale": 1.15, "zoom": 6.0,
 		"muzzles": [Vector3(-2.89, -0.27, -2.59), Vector3(2.89, -0.27, -2.59)],
 		"prop_radius": 1.98, "engine_z": -2.3, "tail_z": 3.6, "body_half_width": 0.8, "smoke_z": -3.4,
 		"paint": {"base_color": Color(0.25, 0.26, 0.15), "paint_b": Color(0.31, 0.31, 0.20), "camo": 0.6,
@@ -58,6 +59,11 @@ const SPECS: Array[Dictionary] = [
 
 static func spec(id: int) -> Dictionary:
 	return SPECS[clampi(id, 0, SPECS.size() - 1)]
+
+
+## A magnification as shown to the player: "3×", "2.5×".
+static func zoom_label(times: float) -> String:
+	return ("%.1f" % times).trim_suffix(".0") + "×"
 
 
 ## Damage per second with every round on target.

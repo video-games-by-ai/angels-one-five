@@ -25,7 +25,10 @@ func _init() -> void:
 	_test_burning_aircraft_slows()
 	_test_trail_darkens_with_damage()
 	_test_health_dots()
+	_test_hit_marks()
+	_test_target_panel()
 	_test_radar_plot()
+	_test_camera_up_settles()
 	_test_ai_hunts_without_crashing()
 	_test_tip_vapour_follows_class_speed()
 	_test_valley_path()
@@ -288,10 +291,108 @@ func _test_health_dots() -> void:
 	check(ok, "five health dots, one per fifth of the hull, at least one while flying")
 
 
+## Bullet holes land on the outline of the zone that was hit, even when the
+## round passed through the (larger) hit sphere outside the aircraft's skin.
+func _test_hit_marks() -> void:
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 7
+	var on_skin: bool = true
+	var anchors_inside: bool = true
+	for frame in range(Airframes.COUNT):
+		var polys: Array[PackedVector2Array] = AirframeOutline.cached_zones(frame)
+		for zone in range(5):
+			anchors_inside = anchors_inside and Geometry2D.is_point_in_polygon(AirframeOutline.anchors(frame)[zone], polys[zone])
+			for k in range(12):
+				var stray: Vector2 = Vector2(rng.randf_range(-7.0, 7.0), rng.randf_range(-7.0, 7.0))
+				on_skin = on_skin and Geometry2D.is_point_in_polygon(AirframeOutline.place_hit(frame, zone, stray), polys[zone])
+				on_skin = on_skin and Geometry2D.is_point_in_polygon(AirframeOutline.random_spot(frame, zone, rng), polys[zone])
+	check(anchors_inside, "every damage zone has a point inside it to pull stray hits toward")
+	check(on_skin, "bullet holes always land inside the zone that was hit")
+	var inside: Vector2 = Vector2(3.0, -0.2)
+	check(AirframeOutline.place_hit(Airframes.Id.MUSTANG, Airframes.Zone.WING_R, inside) == inside, "a hit already on the wing stays where it struck")
+	var m: FlightModel = _model()
+	for k in range(FlightModel.MAX_HIT_MARKS + 5):
+		m.mark_hit(Airframes.Zone.BODY, Vector2(0.0, 0.5))
+	check(m.hit_marks.size() == FlightModel.MAX_HIT_MARKS, "holes are capped at %d per aircraft" % FlightModel.MAX_HIT_MARKS)
+	m.setup(Airframes.Id.SPITFIRE, m.position, 0.0)
+	check(m.hit_marks.is_empty(), "a fresh aircraft has no bullet holes")
+	# A real burst: every hit reports where it struck in the target's own space.
+	var shooter: Combatant = _combatant(0, 0, Airframes.Id.MUSTANG, terrain.spawn_position + Vector3(0, 900, 0))
+	var target: Combatant = _combatant(1, 1, Airframes.Id.SPITFIRE, terrain.spawn_position + Vector3(0, 900, -250))
+	var field: BulletField = BulletField.new()
+	var all: Array[Combatant] = [shooter, target]
+	var hits: int = 0
+	for i in range(60):
+		shooter.shoot(true, 1.0 / 60.0, field)
+		for impact in field.step(1.0 / 60.0, terrain, all):
+			if impact.has("target"):
+				hits += 1
+				var local: Vector3 = impact.local
+				target.model.mark_hit(int(impact.zone), Vector2(local.x, local.z))
+	field.free()
+	check(hits > 0 and target.model.hit_marks.size() == mini(hits, FlightModel.MAX_HIT_MARKS), "each round that strikes leaves a hole (%d hits)" % hits)
+
+
+## The left damage panel follows the opponent in the sights, lingers, fades out
+## slowly and swaps straight to another opponent.
+func _test_target_panel() -> void:
+	var hud: Hud = Hud.new()
+	var me: Combatant = _combatant(0, 0, Airframes.Id.MUSTANG, Vector3.ZERO)
+	var a: Combatant = _combatant(1, 1, Airframes.Id.SPITFIRE, Vector3.ZERO)
+	var b: Combatant = _combatant(2, 1, Airframes.Id.THUNDERBOLT, Vector3.ZERO)
+	var mate: Combatant = _combatant(3, 0, Airframes.Id.SPITFIRE, Vector3.ZERO)
+	hud.player = me
+	hud.frame_delta = 0.05
+	for i in range(4):
+		hud.update_target_panel(a)
+	check(hud.panel_target == a and hud.panel_alpha >= 1.0, "aiming at an opponent shows its panel within 0.2 s")
+	for i in range(30):
+		hud.update_target_panel(null)
+	check(hud.panel_target == a and hud.panel_alpha >= 1.0, "the panel stays up for a while after the guns move off")
+	for i in range(10):
+		hud.update_target_panel(null)
+	check(hud.panel_target == a and hud.panel_alpha > 0.0 and hud.panel_alpha < 1.0, "then it fades out slowly")
+	hud.update_target_panel(b)
+	check(hud.panel_target == b, "aiming at another opponent swaps the panel over")
+	for i in range(80):
+		hud.update_target_panel(null)
+	check(hud.panel_target == null and hud.panel_alpha == 0.0, "the panel is gone once fully faded")
+	hud.update_target_panel(mate)
+	check(hud.panel_target == null, "friends do not get a target panel")
+	hud.update_target_panel(a)
+	hud.target_hit(b)
+	check(hud.panel_target == a, "a stray hit on another opponent does not steal the panel")
+	hud.update_target_panel(null)
+	hud.target_hit(b)
+	check(hud.panel_target == b, "a hit with nobody in the sights shows the one that was hit")
+	b.model.alive = false
+	hud.update_target_panel(null)
+	check(hud.panel_target == b and hud.panel_hold == 0.0, "a destroyed target starts fading straight away")
+	hud.free()
+	var zones: PackedFloat32Array = PackedFloat32Array([0.2, 1.0, 1.0, 0.5, 0.9])
+	check(Hud.damage_summary(zones) == PackedStringArray(["ENGINE CRITICAL", "R WING DAMAGED"]), "damage summary names the worst zones first")
+	check(Hud.damage_summary(PackedFloat32Array([1, 1, 1, 1, 1])) == PackedStringArray(["NO DAMAGE"]), "an untouched aircraft reads no damage")
+	check(Hud.damage_summary(zones, false) == PackedStringArray(["DESTROYED"]), "a shot-down aircraft reads destroyed")
+
+
 func _test_radar_plot() -> void:
 	var at: Vector3 = Vector3(1000, 900, -2000)
 	check(Radar.plot(at, at + Vector3(Radar.RANGE * 0.5, 300, 0), 100.0).is_equal_approx(Vector2(50, 0)), "radar: east is right, height ignored")
 	check(Radar.plot(at, at + Vector3(0, 0, -Radar.RANGE), 100.0).is_equal_approx(Vector2(0, -100)), "radar: north is up, range at the rim")
+
+
+## After a loop the camera's up vector eases back to exactly world up, rather than
+## sticking a hair away from it with a rotation error every frame.
+func _test_camera_up_settles() -> void:
+	var up: Vector3 = Vector3(0.3, 0.9, -0.2).normalized()
+	var weight: float = 1.0 - exp(-3.0 / 60.0)
+	var after_one_second: Vector3 = up
+	for frame in range(3000):
+		up = ChaseCamera.settle_up(up, weight)
+		if frame == 59:
+			after_one_second = up
+	check(after_one_second.dot(Vector3.UP) > 0.99 and after_one_second != Vector3.UP, "the camera still eases back level over about a second")
+	check(up == Vector3.UP, "the camera's up vector settles on exactly world up")
 
 
 ## The valley path can be measured along its length from any position.
@@ -408,6 +509,57 @@ func _test_mouse_aim() -> void:
 	input.reset(Vector3.FORWARD)
 	input.apply_mouse(Vector2(0, -120))
 	check(input.aim_direction.y < -0.1, "inverted mouse up lowers the aim")
+	# Zoomed, the same mouse movement swings the aim less, by the magnification,
+	# so the aim circle crosses the screen at the same pace.
+	input.settings.invert_y = false
+	input.reset(Vector3.FORWARD)
+	input.apply_mouse(Vector2(120, 0))
+	var normal_swing: float = input.aim_direction.angle_to(Vector3.FORWARD)
+	var camera: ChaseCamera = ChaseCamera.new()
+	camera.zoom_now = 3.0
+	input.reset(Vector3.FORWARD)
+	input.aim_scale = camera.aim_scale()
+	input.apply_mouse(Vector2(120, 0))
+	check(is_equal_approx(input.aim_direction.angle_to(Vector3.FORWARD) * 3.0, normal_swing), "zoomed 3x, the mouse swings the aim a third as far")
+	check(is_equal_approx(ChaseCamera.magnification(ChaseCamera.fov_for(4.0)), 4.0), "the zoomed field of view magnifies by the level asked for")
+	camera.free()
+	input.free()
+	_test_zoom_levels()
+
+
+## Z toggles the gunsight zoom, the wheel steps it, and each aircraft's sight
+## sets how far it goes: the heavier the guns, the further.
+func _test_zoom_levels() -> void:
+	var limits: Array[float] = []
+	for id in range(Airframes.COUNT):
+		limits.append(float(Airframes.spec(id).zoom))
+	check(limits[0] < limits[1] and limits[1] < limits[2], "heavier aircraft zoom further (%s)" % str(limits))
+	var input: PlayerInput = PlayerInput.new()
+	input.settings = GameSettings.new()
+	input.max_zoom = limits[Airframes.Id.THUNDERBOLT]
+	input.toggle_zoom()
+	check(is_equal_approx(input.zoom_level, PlayerInput.ZOOM_DEFAULT), "Z zooms to the default level first")
+	input.toggle_zoom()
+	check(input.zoom_level == 1.0, "Z again returns to the normal view")
+	for notch in range(3):
+		input.step_zoom(1)
+	check(absf(input.zoom_level - 2.0) < 0.01, "three wheel notches double the magnification (%.2f)" % input.zoom_level)
+	for notch in range(20):
+		input.step_zoom(1)
+	check(input.zoom_level == input.max_zoom, "the wheel stops at the aircraft's limit")
+	input.toggle_zoom()
+	input.toggle_zoom()
+	check(input.zoom_level == input.max_zoom, "Z returns to the level the wheel chose")
+	input.max_zoom = limits[Airframes.Id.SPITFIRE]
+	input.toggle_zoom()
+	input.toggle_zoom()
+	check(input.zoom_level == input.max_zoom, "a lighter aircraft's sight caps the remembered level")
+	for notch in range(20):
+		input.step_zoom(-1)
+	check(input.zoom_level == 1.0, "the wheel zooms all the way back out")
+	input.step_zoom(1)
+	input.reset(Vector3.FORWARD)
+	check(input.zoom_level == 1.0, "a new life starts zoomed out")
 	input.free()
 
 

@@ -6,12 +6,18 @@ extends Node
 
 const MOUSE_SCALE: float = 0.0021
 const LEVEL_DELAY: float = 1.1
+const ZOOM_STEP: float = 1.26       ## one wheel notch; three notches double the magnification
+const ZOOM_DEFAULT: float = 3.0     ## where Z zooms to until the wheel has picked a level
 
 var command: FlightCommand = FlightCommand.new()
 var settings: GameSettings
 var aim_direction: Vector3 = Vector3.FORWARD
 var camera_up: Vector3 = Vector3.UP
 var enabled: bool = true
+var zoom_level: float = 1.0       ## gunsight magnification asked for; 1 = the normal view
+var zoom_preferred: float = ZOOM_DEFAULT   ## the level Z returns to: the last one the wheel chose
+var max_zoom: float = ZOOM_DEFAULT         ## how far this aircraft's sight zooms
+var aim_scale: float = 1.0        ## mouse sensitivity share; the camera lowers it while zoomed
 var typing: bool = false          ## a chat line is open: keys write text, the mouse still flies
 var idle_time: float = 0.0
 var arena_radius: float = 8600.0
@@ -23,7 +29,7 @@ static func register_actions() -> void:
 		"throttle_up": [KEY_W, KEY_UP], "throttle_down": [KEY_S, KEY_DOWN],
 		"roll_left": [KEY_A, KEY_LEFT], "roll_right": [KEY_D, KEY_RIGHT],
 		"yaw_left": [KEY_Q], "yaw_right": [KEY_E], "boost": [KEY_SHIFT],
-		"center_aim": [KEY_C], "pause": [KEY_ESCAPE], "toggle_fps": [KEY_F3],
+		"center_aim": [KEY_C], "zoom": [KEY_Z], "pause": [KEY_ESCAPE], "toggle_fps": [KEY_F3],
 		"fullscreen": [KEY_F11], "toggle_weather": [KEY_F4],
 	}
 	for action: String in keys:
@@ -54,6 +60,7 @@ func reset(direction: Vector3) -> void:
 	aim_direction = direction.normalized()
 	camera_up = Vector3.UP
 	idle_time = 0.0
+	zoom_level = 1.0
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -61,11 +68,31 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion:
 		apply_mouse((event as InputEventMouseMotion).relative)
+	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		match (event as InputEventMouseButton).button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				step_zoom(1)
+			MOUSE_BUTTON_WHEEL_DOWN:
+				step_zoom(-1)
+
+
+## Z: jump between the normal view and the zoom level used last.
+func toggle_zoom() -> void:
+	zoom_level = 1.0 if zoom_level > 1.0 else clampf(zoom_preferred, 1.0, max_zoom)
+
+
+## Mouse wheel: zoom in (positive) or out by notches, up to the aircraft's limit
+## and back down to the normal view.
+func step_zoom(notches: int) -> void:
+	var level: float = clampf(zoom_level * pow(ZOOM_STEP, notches), 1.0, max_zoom)
+	zoom_level = 1.0 if level < 1.1 else level
+	if zoom_level > 1.0:
+		zoom_preferred = zoom_level
 
 
 ## Swing the aim around the camera's axes: right/left yaws, up/down pitches.
 func apply_mouse(relative: Vector2) -> void:
-	var sens: float = MOUSE_SCALE * settings.mouse_sensitivity
+	var sens: float = MOUSE_SCALE * settings.mouse_sensitivity * aim_scale
 	var dy: float = relative.y * (-1.0 if settings.invert_y else 1.0)
 	var right: Vector3 = aim_direction.cross(camera_up).normalized()
 	if right.length_squared() < 0.5:
@@ -82,6 +109,8 @@ func sample(delta: float, aircraft_position: Vector3, nose: Vector3) -> FlightCo
 	idle_time += delta
 	if not typing and Input.is_action_just_pressed("center_aim"):
 		aim_direction = nose
+	if enabled and not typing and Input.is_action_just_pressed("zoom"):
+		toggle_zoom()
 	# Assisted levelling: an idle aim drifts back to the horizon.
 	if settings.level_assist and idle_time > LEVEL_DELAY and absf(aim_direction.y) < 0.85:
 		var flat: Vector3 = Vector3(aim_direction.x, 0.0, aim_direction.z).normalized()

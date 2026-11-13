@@ -23,6 +23,7 @@ Linux, are still to do, as are rockets and practice targets (see
 | Agility | Best | Good | Slow to roll and pull |
 | Firepower | 96 damage/s | 130 damage/s | 196 damage/s |
 | Hull | 80 | 100 | 135 (and a bigger target) |
+| Gunsight zoom | up to 3× | up to 4× | up to 6× |
 | Engine sound | Smooth Merlin V-12 purr | Rough Packard Merlin V-12 | Deep, lumpy 18-cylinder radial |
 | Guns | Crisp, fast rattle | Heavy .50 cal punch | Eight-gun thump |
 
@@ -33,7 +34,13 @@ aircraft's engine.
 Each aircraft has five damage zones: engine, body, left wing, right wing and tail.
 A damaged engine loses power, holed wings roll slowly, a shot-up tail pitches and
 yaws slowly, and a badly hit aircraft trails smoke and then fire. The airframe
-panel shows where you have been hit.
+panel on the right shows where you have been hit, with a dark hole for each round
+that struck. The opponent in your sights gets the same panel on the left: its
+type, range, damaged zones, bullet holes, exact hull percentage and worst damage.
+It fades in when you aim at or hit that aircraft, stays two seconds after you look
+away, then fades out; aiming at another opponent swaps it over. Online, holes from
+other players' rounds are placed at random inside the zone that was hit, because
+only the zone is sent over the network.
 
 Opponents fly the same flight model as you. They patrol, attack in passes, fire
 short bursts, break away when hit and avoid the mountains. Each one that goes
@@ -70,6 +77,8 @@ open `game/project.godot` and press F5.
 | A / D | Manual roll |
 | Q / E | Rudder |
 | C | Re-centre the aim on the nose |
+| Z | Zoom in for long shots; press again to zoom back out |
+| Mouse wheel | Zoom in / out by steps, up to the aircraft's gunsight limit (Z returns to the level used last) |
 | Esc | Pause menu, settings and Change aircraft (on the selection screen: settings) |
 | Enter | Online: open the chat line; Enter sends, Esc cancels |
 | 1 / 2 / 3, ← / →, Enter | Choose and fly an aircraft on the selection screen |
@@ -239,7 +248,7 @@ The release script also runs the headless flight tests in
 `game/tests/test_flight.gd`. They cover terrain sampling, turning, climbing,
 levelling, boost, collision, class balance, mouse/invert handling, fire rates,
 hits and misses, time to kill per aircraft, damage zones and their effects, the
-slowdown of burning aircraft, the trail stages, health dots, radar placement, and
+slowdown of burning aircraft, the trail stages, health dots, bullet-hole placement, the target panel's fading, radar placement, and
 AI pilots hunting for three minutes without crashing. The Plav & Gusinje map is
 checked too: lake level, summit height and place, the route, the autopilot flying
 it end to end and AI pilots hunting over it without crashing.
@@ -276,7 +285,7 @@ the trail, smoke and health-dot stages.
 - `input/`: `FlightCommand`, the device-independent pilot intent, and the mouse/keyboard source
 - `camera/`: chase camera with boost pull-back and adjustable shake
 - `net/`: online play: invite, message format, session (encryption, secret check, lobby), the host's referee, remote aircraft smoothing, UPnP and address detection
-- `ui/`: aircraft selection, online lobby, HUD with target markers and the see-through airframe damage panel, lens flare, pause menu
+- `ui/`: aircraft selection, online lobby, HUD with target markers, the see-through airframe damage panel and the opponent's target panel, lens flare, pause menu
 
 Flight runs on a fixed 60 Hz step and is rendered with physics interpolation. All
 pilot input goes through `FlightCommand`, so gamepad, touch, AI or network input
@@ -285,7 +294,7 @@ can be added without changing the flight code.
 ## Roadmap
 
 1. **Flyable scene (done):** valley, lighting, clouds, forests, lake, Mustang, flight model, chase camera, HUD, settings, audio, Linux/Windows builds, benchmark.
-2. **Combat (mostly done):** guns with tracers, muzzle flash, hit sparks and sounds, hit confirmation, a lead ring as aim help, damage zones driving the airframe panel, a flight-path trail behind every aircraft that turns from a faint line to black smoke and fire as it is shot up (burning aircraft fly up to 28% slower), five health dots on the aircraft in front of the guns, a see-through radar map, AI fighters that pursue, evade and explode. Still to do: limited rockets and static practice targets. Design and sketches: [docs/combat-readability-design.md](docs/combat-readability-design.md).
+2. **Combat (mostly done):** guns with tracers, muzzle flash, hit sparks and sounds, hit confirmation, a lead ring as aim help, damage zones driving the airframe panel, a flight-path trail behind every aircraft that turns from a faint line to black smoke and fire as it is shot up (burning aircraft fly up to 28% slower), five health dots on the aircraft in front of the guns, a fading target panel with that aircraft's damage and bullet holes, a see-through radar map, AI fighters that pursue, evade and explode. Still to do: limited rockets and static practice targets. Design and sketches: [docs/combat-readability-design.md](docs/combat-readability-design.md).
 3. **Aircraft choice (done):** Spitfire Mk IX, P-51D Mustang and P-47D Thunderbolt, each with its own engine and gun sound, and a selection screen before every sortie, with Host match and Join match entries.
 4. **Multiplayer (built, tested on one machine):** host/join with a pasted invite over one host-opened UDP port, 2 to 4 players free-for-all, host-decided damage and score, smooth remote aircraft, respawn and rematch, UPnP and address help, and a dedicated server mode. Still to do: a match between two homes over the internet. Design: [docs/multiplayer-design.md](docs/multiplayer-design.md).
 5. **Release check:** run natively on Windows, cross-play between Windows and Linux, and a final performance pass.

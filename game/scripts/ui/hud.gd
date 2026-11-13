@@ -3,8 +3,10 @@ extends Control
 ## In-flight interface: steering circle and gun cross near the action, markers
 ## and a lead pip on opponents, five health dots on the aircraft in front of the
 ## guns, a radar map in the top left, status strip at the bottom, score bar at
-## the top, see-through airframe damage panel on the middle right. Everything is
-## drawn in _draw so it stays crisp at any resolution.
+## the top, see-through airframe damage panel on the middle right and, mirroring
+## it on the middle left, the same panel for the opponent in the sights. Both show
+## bullet holes where rounds struck. Everything is drawn in _draw so it stays
+## crisp at any resolution.
 
 const TEXT: Color = Color("fbf4e6")
 const DIM: Color = Color("e6d8bf")
@@ -24,6 +26,15 @@ const DOTS_FADE_IN: float = 0.15      ## seconds for the health dots to appear
 const DOTS_LINGER: float = 2.0        ## seconds they stay after the guns move off or a hit lands
 const DOTS_FADE_OUT: float = 0.35
 const RADAR_SIZE: float = 210.0       ## px across at 1080p
+const TARGET_FADE_IN: float = 0.15    ## seconds for the target panel to appear
+const TARGET_LINGER: float = 2.0      ## seconds it stays after the guns move off
+const TARGET_FADE_OUT: float = 1.2    ## then it fades this slowly
+const TARGET_PANEL: Color = Color(0.09, 0.07, 0.05, 0.4)   ## lighter than PANEL: the valley shows through
+const HOLE: Color = Color(0.07, 0.055, 0.045, 0.92)
+const HOLE_RIM: Color = Color(0.55, 0.53, 0.5, 0.9)     ## torn grey metal round each hole
+const SCORCH: Color = Color(0.16, 0.12, 0.09, 0.45)     ## soot around it
+const HOLE_GLOW: Color = Color(1.0, 0.92, 0.72)
+const ZONE_NAMES: Array[String] = ["ENGINE", "BODY", "L WING", "R WING", "TAIL"]
 
 var font: Font
 var font_bold: Font
@@ -36,7 +47,6 @@ var opponents: Array[Combatant] = []
 var aircraft_name: String = ""
 var mode_label: String = "PRACTICE DOGFIGHT"
 var airframe_id: int = -1
-var outline_extent: Vector3 = Vector3.ZERO
 var hit_marker: float = 0.0       ## flashes when one of our rounds lands
 var damage_flash: float = 0.0     ## flashes when we are hit
 var message: String = ""
@@ -46,12 +56,16 @@ var clock: float = 0.0
 var show_fps: bool = false
 var hint_time: float = 14.0
 var crash_time: float = 0.0
-var zone_polygons: Array[PackedVector2Array] = []
 var ui_scale: float = 1.0
 var frame_delta: float = 0.0
 var dots_shown: Dictionary = {}       ## combatant id -> health-dot opacity 0..1
 var dots_hold: Dictionary = {}        ## combatant id -> seconds the dots stay up
 var radar: Radar
+var panel_target: Combatant           ## opponent on the left damage panel, or null
+var aimed_target: Combatant           ## opponent the guns point at this frame, or null
+var panel_alpha: float = 0.0
+var panel_hold: float = 0.0           ## seconds the panel stays before fading
+var panel_glow: float = 0.0           ## the newest hole on the target panel glows briefly
 
 
 func _ready() -> void:
@@ -68,8 +82,6 @@ func attach(pilot: Combatant, enemies: Array[Combatant]) -> void:
 	opponents = enemies
 	airframe_id = pilot.frame_id
 	aircraft_name = String(model.spec.name)
-	zone_polygons = AirframeOutline.zones(airframe_id)
-	outline_extent = AirframeOutline.extent(airframe_id)
 	clock = 0.0
 	hint_time = 16.0
 	crash_time = 0.0
@@ -78,6 +90,11 @@ func attach(pilot: Combatant, enemies: Array[Combatant]) -> void:
 	message_time = 0.0
 	dots_shown.clear()
 	dots_hold.clear()
+	panel_target = null
+	aimed_target = null
+	panel_alpha = 0.0
+	panel_hold = 0.0
+	panel_glow = 0.0
 	if radar == null and terrain != null:
 		radar = Radar.new()
 		radar.hud = self
@@ -85,10 +102,57 @@ func attach(pilot: Combatant, enemies: Array[Combatant]) -> void:
 		radar.setup(terrain)
 
 
-## One of our rounds struck `target`: keep its health dots up for a while.
+## One of our rounds struck `target`: keep its health dots up for a while, and
+## its damage panel too unless the guns are already on someone else.
 func target_hit(target: Combatant) -> void:
 	dots_hold[target.id] = DOTS_LINGER
 	dots_shown[target.id] = maxf(float(dots_shown.get(target.id, 0.0)), 0.6)
+	if is_friend(target) or (aimed_target != null and aimed_target != target):
+		return
+	panel_target = target
+	panel_hold = TARGET_LINGER
+	panel_glow = 1.0
+
+
+## Which opponent the left damage panel shows, and how visible it is. `aimed` is
+## the one in the sights this frame (or null). The panel fades in quickly, stays a
+## while after the guns move off, then fades out slowly; aiming at another
+## opponent swaps it straight over.
+func update_target_panel(aimed: Combatant) -> void:
+	aimed_target = aimed if aimed != null and not is_friend(aimed) else null
+	if aimed_target != null:
+		panel_target = aimed_target
+		panel_hold = TARGET_LINGER
+	else:
+		panel_hold = maxf(panel_hold - frame_delta, 0.0)
+	if panel_target != null and panel_target.left:
+		panel_target = null
+	elif panel_target != null and not panel_target.model.alive:
+		panel_hold = 0.0   # shot down: show it wrecked, then let it go
+	if panel_target != null and panel_hold > 0.0:
+		panel_alpha = minf(panel_alpha + frame_delta / TARGET_FADE_IN, 1.0)
+	else:
+		panel_alpha = maxf(panel_alpha - frame_delta / TARGET_FADE_OUT, 0.0)
+	if panel_alpha <= 0.0:
+		panel_target = null
+	panel_glow = maxf(panel_glow - frame_delta * 2.0, 0.0)
+
+
+## The worst-hit zones, worst first, as "ENGINE CRITICAL", "R WING DAMAGED".
+static func damage_summary(zone_health: PackedFloat32Array, alive: bool = true) -> PackedStringArray:
+	if not alive:
+		return PackedStringArray(["DESTROYED"])
+	var order: Array[int] = [0, 1, 2, 3, 4]
+	order.sort_custom(func(a: int, b: int) -> bool: return zone_health[a] < zone_health[b])
+	var out: PackedStringArray = PackedStringArray()
+	for zone in order:
+		if zone_health[zone] <= 0.3:
+			out.append(ZONE_NAMES[zone] + " CRITICAL")
+		elif zone_health[zone] <= 0.7:
+			out.append(ZONE_NAMES[zone] + " DAMAGED")
+	if out.is_empty():
+		out.append("NO DAMAGE")
+	return out
 
 
 func is_friend(other: Combatant) -> bool:
@@ -134,6 +198,7 @@ func _draw() -> void:
 	_draw_top(s)
 	_draw_bottom(s)
 	_draw_airframe(s)
+	_draw_target_panel(s)
 	_draw_warnings(s)
 	if hint_time > 0.0:
 		_draw_hints(s)
@@ -169,6 +234,12 @@ func _draw_sights(s: float) -> void:
 			draw_arc(c, r, a0, a0 + TAU / 4.0 - 0.7, 16, Color(0, 0, 0, 0.35), 4.0 * s)
 			draw_arc(c, r, a0, a0 + TAU / 4.0 - 0.7, 16, AMBER, 1.6 * s)
 		draw_circle(c, 2.4 * s, AMBER)
+		var zoom: float = (camera as ChaseCamera).zoom
+		if zoom > 1.0:
+			var label: String = "ZOOM " + Airframes.zoom_label(zoom) + (" · MAX" if zoom >= float(model.spec.zoom) else "")
+			var at: Vector2 = Vector2(c.x - 100 * s, c.y + r + 24 * s)
+			draw_string_outline(font_bold, at, label, HORIZONTAL_ALIGNMENT_CENTER, 200 * s, int(14 * s), int(4 * s), Color(0, 0, 0, 0.45))
+			_text(at, label, 14 * s, AMBER, true, HORIZONTAL_ALIGNMENT_CENTER, 200 * s)
 	var nose: Variant = _project(model.position + model.forward() * 650.0)
 	if nose != null:
 		var n: Vector2 = nose
@@ -203,6 +274,7 @@ func _draw_damage_flash() -> void:
 ## and get no lead pip.
 func _draw_targets(s: float) -> void:
 	if not model.alive:
+		update_target_panel(null)
 		return
 	var gun_cross: Variant = _project(model.position + model.forward() * 650.0)
 	var aim_point: Variant = _project(model.position + input.aim_direction * 1200.0)
@@ -218,6 +290,7 @@ func _draw_targets(s: float) -> void:
 				best = enemy
 	for enemy in opponents:
 		_update_dots(enemy, enemy == best)
+	update_target_panel(best)
 
 
 ## Draws one opponent's marker. Returns how close the sights are to it, as a
@@ -236,7 +309,8 @@ func _draw_target(enemy: Combatant, s: float, gun_cross: Variant, aim_point: Var
 		_draw_edge_arrow(where, dist, s, colour)
 		return INF
 	var c: Vector2 = screen
-	var half: float = clampf(9.0 * size.y / maxf(dist, 1.0), 13.0 * s, 60.0 * s)
+	var zoom: float = ChaseCamera.magnification(camera.fov)
+	var half: float = clampf(9.0 * size.y * zoom / maxf(dist, 1.0), 13.0 * s, 60.0 * s * maxf(zoom, 1.0))
 	var arm: float = half * 0.42
 	for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
 		var p: Vector2 = c + corner * half
@@ -362,22 +436,8 @@ func _draw_airframe(s: float) -> void:
 	_panel(rect)
 	_text(rect.position + Vector2(14 * s, 24 * s), "AIRFRAME", 13 * s, DIM, true)
 	_text(rect.position + Vector2(0, 24 * s), String(model.spec.short), 12 * s, DIM, false, HORIZONTAL_ALIGNMENT_RIGHT, w - 14 * s)
-	# Fit this aircraft's planform into the panel, whatever its size.
-	var room: Vector2 = Vector2(w - 28 * s, h - 78 * s)
-	var scale_px: float = minf(room.x / (outline_extent.z * 2.0), room.y / (outline_extent.y - outline_extent.x))
-	var origin: Vector2 = rect.position + Vector2(w * 0.5, 36 * s + room.y * 0.5 - (outline_extent.x + outline_extent.y) * 0.5 * scale_px)
-	for i in range(zone_polygons.size()):
-		var poly: PackedVector2Array = PackedVector2Array()
-		for p in zone_polygons[i]:
-			poly.append(origin + p * scale_px)
-		var health: float = model.zone_health[i]
-		var fill: Color = ZONE_OK if health > 0.7 else (ZONE_DAMAGED if health > 0.3 else ZONE_CRITICAL)
-		if health <= 0.7:
-			fill.a = 0.85
-		draw_colored_polygon(poly, fill)
-		var outline: PackedVector2Array = poly.duplicate()
-		outline.append(poly[0])
-		draw_polyline(outline, Color(1, 0.96, 0.87, 0.85), 1.2 * s, true)
+	var room: Rect2 = Rect2(rect.position + Vector2(14 * s, 36 * s), Vector2(w - 28 * s, h - 78 * s))
+	_draw_planform(room, model, 1.0, 1.0, damage_flash, s)
 	var legend_y: float = rect.end.y - 16 * s
 	var lx: float = rect.position.x + 14 * s
 	for item: Array in [["OK", ZONE_OK, true], ["DAMAGED", ZONE_DAMAGED, false], ["CRITICAL", ZONE_CRITICAL, false]]:
@@ -388,6 +448,89 @@ func _draw_airframe(s: float) -> void:
 			draw_rect(box, item[1], true)
 		_text(Vector2(lx + 14 * s, legend_y), item[0], 11 * s, DIM)
 		lx += (36.0 + item[0].length() * 6.5) * s
+
+
+## Fit an aircraft's top-down outline into `room` and draw its zones, tinted by
+## damage, with a dark hole where each round struck. `alpha` fades all of it,
+## `fill` scales the zone tints, and the newest hole glows while `glow` > 0.
+func _draw_planform(room: Rect2, m: FlightModel, alpha: float, fill: float, glow: float, s: float) -> void:
+	var polys: Array[PackedVector2Array] = AirframeOutline.cached_zones(m.frame_id)
+	var extent: Vector3 = AirframeOutline.extent(m.frame_id)
+	var scale_px: float = minf(room.size.x / (extent.z * 2.0), room.size.y / (extent.y - extent.x))
+	var origin: Vector2 = room.get_center() - Vector2(0.0, (extent.x + extent.y) * 0.5 * scale_px)
+	for i in range(polys.size()):
+		var poly: PackedVector2Array = PackedVector2Array()
+		for p in polys[i]:
+			poly.append(origin + p * scale_px)
+		var health: float = m.zone_health[i]
+		var tint: Color = ZONE_OK if health > 0.7 else (ZONE_DAMAGED if health > 0.3 else ZONE_CRITICAL)
+		if health <= 0.7:
+			tint.a = 0.85 * fill
+		tint.a *= alpha
+		draw_colored_polygon(poly, tint)
+		var outline: PackedVector2Array = poly.duplicate()
+		outline.append(poly[0])
+		draw_polyline(outline, Color(1, 0.96, 0.87, 0.85 * alpha), 1.2 * s, true)
+	var r: float = 3.2 * s
+	for spot in m.hit_marks:
+		var p: Vector2 = origin + spot * scale_px
+		draw_circle(p, r + 2.4 * s, Color(SCORCH, SCORCH.a * alpha))
+		draw_arc(p, r + 0.7 * s, 0.0, TAU, 12, Color(HOLE_RIM, HOLE_RIM.a * alpha), 1.0 * s, true)
+		draw_circle(p, r, Color(HOLE, HOLE.a * alpha))
+	if glow > 0.0 and not m.hit_marks.is_empty():
+		var newest: Vector2 = origin + m.hit_marks[m.hit_marks.size() - 1] * scale_px
+		draw_arc(newest, r + 3.5 * s, 0.0, TAU, 18, Color(HOLE_GLOW, clampf(glow, 0.0, 1.0) * alpha), 1.6 * s, true)
+
+
+## The opponent in the sights: its type, range, outline with damage and bullet
+## holes, exact hull share and worst damage. Mirrors the airframe panel.
+func _draw_target_panel(s: float) -> void:
+	if panel_target == null or panel_alpha <= 0.0:
+		return
+	var a: float = panel_alpha
+	var m: FlightModel = panel_target.model
+	var w: float = 240.0 * s
+	var h: float = 300.0 * s
+	var rect: Rect2 = Rect2(24 * s, size.y * 0.5 - h * 0.5 - 30 * s, w, h)
+	draw_rect(rect, Color(TARGET_PANEL, TARGET_PANEL.a * a), true)
+	draw_rect(rect, Color(EDGE, EDGE.a * a), false, 1.0)
+	var x: float = rect.position.x + 14 * s
+	var inner: float = w - 28 * s
+	var heading: String = "TARGET" if panel_target.pilot_name == "" else panel_target.pilot_name.to_upper()
+	_text(Vector2(x, rect.position.y + 24 * s), heading, 13 * s, Color(HOSTILE, a), true)
+	var where: Vector3 = m.position
+	if panel_target.aircraft != null:
+		where = panel_target.aircraft.get_global_transform_interpolated().origin
+	_text(Vector2(x, rect.position.y + 24 * s), "%d m" % int(where.distance_to(model.position)), 12 * s, Color(DIM, a), false, HORIZONTAL_ALIGNMENT_RIGHT, inner)
+	_text(Vector2(x, rect.position.y + 45 * s), String(m.spec.name).to_upper(), 15 * s, Color(TEXT, a), true)
+	var room: Rect2 = Rect2(Vector2(x, rect.position.y + 56 * s), Vector2(inner, h - 56 * s - 74 * s))
+	_draw_planform(room, m, a, 0.85, panel_glow, s)
+	# Hull: an exact share, with quarter ticks.
+	var share: float = clampf(m.hull / float(m.spec.hull), 0.0, 1.0)
+	var y: float = rect.end.y - 44 * s
+	_text(Vector2(x, y + 5 * s), "HULL", 13 * s, Color(DIM, a), true)
+	var bar: Rect2 = Rect2(Vector2(x + 52 * s, y - 5 * s), Vector2(inner - 52 * s - 52 * s, 11 * s))
+	draw_rect(bar, Color(1, 1, 1, 0.12 * a), true)
+	var colour: Color = TEXT if share > 0.5 else (ZONE_DAMAGED if share > 0.25 else ZONE_CRITICAL)
+	draw_rect(Rect2(bar.position + Vector2(1, 1) * s, Vector2((bar.size.x - 2 * s) * share, bar.size.y - 2 * s)), Color(colour, a), true)
+	for k in range(1, 4):
+		var tx: float = bar.position.x + bar.size.x * k / 4.0
+		draw_line(Vector2(tx, bar.position.y), Vector2(tx, bar.end.y), Color(1, 1, 1, 0.4 * a), 1.0)
+	draw_rect(bar, Color(1, 1, 1, 0.5 * a), false, 1.0)
+	_text(Vector2(x, y + 7 * s), "%d%%" % int(ceil(share * 100.0 - 0.001)), 17 * s, Color(TEXT, a), true, HORIZONTAL_ALIGNMENT_RIGHT, inner)
+	# Worst damage in words, as much as fits on one line.
+	var parts: PackedStringArray = damage_summary(m.zone_health, m.alive)
+	var px: int = int(12 * s)
+	var line: String = parts[0]
+	if parts.size() > 1:
+		var both: String = parts[0] + " · " + parts[1]
+		if font_bold.get_string_size(both, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x <= inner:
+			line = both
+	var worst: float = 1.0
+	for v in m.zone_health:
+		worst = minf(worst, v)
+	var tone: Color = ZONE_CRITICAL if (worst <= 0.3 or not m.alive) else (ZONE_DAMAGED if worst <= 0.7 else DIM)
+	_text(Vector2(x, rect.end.y - 14 * s), line, 12 * s, Color(tone, a), true)
 
 
 func _draw_warnings(s: float) -> void:
@@ -414,10 +557,11 @@ func _draw_hints(s: float) -> void:
 		"Put the white cross on the red lead ring",
 		"SHIFT  boost      W / S  throttle",
 		"A / D  roll      Q / E  rudder",
-		"C  centre aim     ESC  pause & change aircraft",
+		"C  centre aim     Z / WHEEL  zoom for long shots",
+		"ESC  pause & change aircraft",
 		"F4  snow showers on / off (weather test)",
 	]
-	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 298 * s), Vector2(390 * s, 206 * s))
+	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 324 * s), Vector2(390 * s, 232 * s))
 	draw_rect(rect, Color(PANEL, PANEL.a * a), true)
 	draw_rect(rect, Color(EDGE, EDGE.a * a), false, 1.0)
 	for i in range(lines.size()):

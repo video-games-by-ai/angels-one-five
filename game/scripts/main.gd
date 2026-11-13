@@ -16,6 +16,7 @@ extends Node3D
 ##   --benchmark-out=PATH     write benchmark results as JSON
 ##   --screenshot=PATH --screenshot-at=SECONDS   save one frame
 ##   --screenshot-when-firing  after that time, wait for the player's guns before saving
+##   --zoom[=TIMES]           diagnostics: hold the gunsight zoom at TIMES, or at the aircraft's limit
 ##   --view=X,Y,Z,YAW,PITCH   fixed camera for map screenshots (metres, degrees; yaw 0 = north, 90 = west)
 ##   --quit-at=SECONDS
 ##   --log                    print position / FPS once per second
@@ -78,6 +79,7 @@ var aircraft_id: int = -1
 var opponent_count: int = 2
 var ai_player: bool = false
 var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var hit_rng: RandomNumberGenerator = RandomNumberGenerator.new()   ## scatters bullet holes reported by zone only
 var elapsed: float = 0.0
 var screenshot_path: String = ""
 var screenshot_at: float = -1.0
@@ -86,6 +88,7 @@ var benchmark_seconds: float = 0.0
 var benchmark_out: String = ""
 var frame_times: PackedFloat32Array = PackedFloat32Array()
 var fixed_view: PackedFloat64Array = PackedFloat64Array()
+var forced_zoom: float = 0.0
 var opponent_hull: PackedFloat64Array = PackedFloat64Array()
 # Online play
 var net: NetSession
@@ -146,6 +149,10 @@ func _ready() -> void:
 			screenshot_path = arg.trim_prefix("--screenshot=")
 		elif arg.begins_with("--screenshot-at="):
 			screenshot_at = float(arg.trim_prefix("--screenshot-at="))
+		elif arg == "--zoom":
+			forced_zoom = 99.0
+		elif arg.begins_with("--zoom="):
+			forced_zoom = float(arg.trim_prefix("--zoom="))
 		elif arg.begins_with("--view="):
 			fixed_view = arg.trim_prefix("--view=").split_floats(",")
 		elif arg.begins_with("--opponent-hull="):
@@ -613,6 +620,8 @@ func _on_impact(impact: Dictionary) -> void:
 		return
 	var target: Combatant = impact.target
 	var shooter: Combatant = combatants[int(impact.shooter)]
+	var local: Vector3 = impact.local
+	target.model.mark_hit(int(impact.zone), Vector2(local.x, local.z))
 	var destroyed: bool = target.model.apply_damage(float(impact.damage), int(impact.zone))
 	effects.sparks(point)
 	target.hit_flash = 1.0
@@ -655,7 +664,11 @@ func _process(delta: float) -> void:
 	if mode == Mode.FLYING and player != null:
 		var shown: Transform3D = aircraft.get_global_transform_interpolated()
 		input.camera_up = camera.up_vector
+		input.max_zoom = float(model.spec.zoom)
+		var zoom: float = input.zoom_level if forced_zoom <= 0.0 else forced_zoom
+		camera.zoom = minf(zoom, input.max_zoom) if model.alive else 1.0
 		camera.follow(delta, input.aim_direction, shown, model)
+		input.aim_scale = camera.aim_scale()
 		for c in combatants:
 			if c.aircraft != null and c.aircraft.visible:
 				c.aircraft.animate(c.model, delta)
@@ -1049,6 +1062,8 @@ func _local_hit(impact: Dictionary) -> void:
 		return
 	effects.sparks(impact.point)
 	target.hit_flash = 1.0
+	var local: Vector3 = impact.local
+	target.model.mark_hit(int(impact.zone), Vector2(local.x, local.z))
 	audio.hit_confirm()
 	hud.hit_marker = 0.16
 	hud.target_hit(target)
@@ -1169,11 +1184,17 @@ func _apply_event(e: Dictionary) -> void:
 			var by: Combatant = _combatant_at(int(e.shooter))
 			if t == null or t.left:
 				return
+			var before: float = t.model.hull
 			t.model.hull = float(e.hull)
 			t.model.zone_health = (e.zones as PackedFloat32Array).duplicate()
 			if by != player:   # our own hits were shown when they landed
 				effects.sparks(t.model.position)
 				t.hit_flash = 1.0
+				# Only the zone travels over the network: scatter the holes inside it.
+				var per_round: float = float(by.model.spec.gun_damage) if by != null else 10.0
+				var rounds: int = clampi(roundi((before - float(e.hull)) / maxf(per_round, 1.0)), 1, NetProtocol.MAX_ROUNDS_PER_CLAIM)
+				for k in range(rounds):
+					t.model.mark_hit(int(e.zone), AirframeOutline.random_spot(t.model.frame_id, int(e.zone), hit_rng))
 			if t == player:
 				audio.struck()
 				hud.damage_flash = 1.0
