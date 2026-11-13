@@ -1,0 +1,16 @@
+{
+  "avg_fps": 318.0,
+  "avg_ms": 3.14,
+  "cpu": "AMD Ryzen 7 3700X 8-Core Processor",
+  "driver": "1.4.351",
+  "frames": 9541,
+  "godot": "4.5.1-stable (official)",
+  "gpu": "NVIDIA GeForce RTX 2070 SUPER",
+  "one_percent_low_fps": 212.3,
+  "p99_ms": 4.71,
+  "quality": "Low",
+  "resolution": "1920x1080",
+  "seconds": 30.0,
+  "vsync": 0,
+  "worst_ms": 9.78
+}
