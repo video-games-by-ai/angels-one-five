@@ -22,9 +22,14 @@ func _init() -> void:
 	_test_heavy_outlasts_light()
 	_test_damage_zones()
 	_test_engine_damage_slows()
+	_test_burning_aircraft_slows()
+	_test_trail_darkens_with_damage()
+	_test_health_dots()
+	_test_radar_plot()
 	_test_ai_hunts_without_crashing()
 	_test_tip_vapour_follows_class_speed()
 	_test_valley_path()
+	_test_volume_settings_persist()
 	# The second map: same terrain, route and AI checks on its own data.
 	terrain = TerrainData.load_map("plav")
 	Weather.use_map(terrain)
@@ -236,6 +241,59 @@ func _test_engine_damage_slows() -> void:
 	check(absf(holed.basis().x.y) < absf(agile.basis().x.y), "a damaged wing rolls more slowly")
 
 
+## Below 40% hull an aircraft loses power, reaching about 28% lower speed under
+## 20%; an engine hit and a burning airframe never stack.
+func _test_burning_aircraft_slows() -> void:
+	check(FlightModel.damage_power(1.0, 1.0) == 1.0 and FlightModel.damage_power(1.0, 0.45) == 1.0, "no power loss above 40% hull")
+	check(is_equal_approx(FlightModel.damage_power(1.0, 0.15), 0.52), "a burning airframe keeps 52% power")
+	check(is_equal_approx(FlightModel.damage_power(0.0, 0.15), 0.5), "engine and hull losses do not stack")
+	var healthy: FlightModel = _model()
+	var holed: FlightModel = _model()
+	var burning: FlightModel = _model()
+	holed.apply_damage(55.0, Airframes.Zone.BODY)
+	burning.apply_damage(85.0, Airframes.Zone.BODY)
+	for m in [healthy, holed, burning]:
+		_fly(m, Vector3.FORWARD, 20.0)
+	check(healthy.alive and holed.alive and burning.alive, "all three stay airborne for the speed check")
+	check(absf(holed.speed - healthy.speed) < 1.0, "45%% hull flies at full speed (%d vs %d m/s)" % [int(holed.speed), int(healthy.speed)])
+	var ratio: float = burning.speed / healthy.speed
+	check(ratio > 0.68 and ratio < 0.8, "15%% hull flies about 28%% slower (%.0f%% of full speed)" % (ratio * 100.0))
+
+
+## The flight-path line goes from a faint white line to black smoke as the hull
+## is shot away, getting wider, and never jumps between stages.
+func _test_trail_darkens_with_damage() -> void:
+	var healthy: Array = DamageTrail.look(1.0)
+	var hit: Array = DamageTrail.look(0.7)
+	check((healthy[0] as Color).a < 0.3 and (healthy[0] as Color).v > 0.95, "a healthy aircraft leaves a faint white line")
+	check((hit[0] as Color).a > 0.5 and (hit[0] as Color).v > 0.95, "a hit aircraft leaves a solid white line")
+	var smooth: bool = true
+	var darker: bool = true
+	var previous: Array = DamageTrail.look(1.0)
+	for i in range(1, 101):
+		var current: Array = DamageTrail.look(1.0 - i / 100.0)
+		darker = darker and (current[0] as Color).v <= (previous[0] as Color).v + 0.0001 and float(current[1]) >= float(previous[1]) - 0.0001
+		smooth = smooth and absf((current[0] as Color).v - (previous[0] as Color).v) < 0.05
+		previous = current
+	check(darker, "the line darkens and widens as damage mounts")
+	check(smooth, "the line changes smoothly between stages")
+	check((DamageTrail.look(0.1)[0] as Color).v < 0.1, "a nearly destroyed aircraft trails black smoke")
+
+
+func _test_health_dots() -> void:
+	var cases: Dictionary = {1.0: 5, 0.85: 5, 0.79: 4, 0.6: 3, 0.5: 3, 0.3: 2, 0.15: 1, 0.01: 1, 0.0: 0}
+	var ok: bool = true
+	for share: float in cases:
+		ok = ok and Hud.health_dots(share) == int(cases[share])
+	check(ok, "five health dots, one per fifth of the hull, at least one while flying")
+
+
+func _test_radar_plot() -> void:
+	var at: Vector3 = Vector3(1000, 900, -2000)
+	check(Radar.plot(at, at + Vector3(Radar.RANGE * 0.5, 300, 0), 100.0).is_equal_approx(Vector2(50, 0)), "radar: east is right, height ignored")
+	check(Radar.plot(at, at + Vector3(0, 0, -Radar.RANGE), 100.0).is_equal_approx(Vector2(0, -100)), "radar: north is up, range at the rim")
+
+
 ## The valley path can be measured along its length from any position.
 func _test_valley_path() -> void:
 	var mid: Vector3 = terrain.valley_path[terrain.valley_path.size() / 2]
@@ -365,3 +423,26 @@ func _test_tip_vapour_follows_class_speed() -> void:
 		ok = ok and cruise == 0.0 and at_top > 0.1 and at_boost > at_top * 2.0
 	check(ok, "every class shows tip vapour near its own top speed, none at cruise")
 	check(is_equal_approx(TipTrail.vapour_strength(6.0, 100.0, 172.0, 205.0), 1.0), "a hard pull gives the full tip ribbon at any speed")
+
+
+## Volumes survive a save and reload, and drive their own audio buses.
+func _test_volume_settings_persist() -> void:
+	var path: String = "user://test_settings.cfg"
+	var s: GameSettings = GameSettings.new()
+	s.master_volume = 0.35
+	s.engine_volume = 0.5
+	s.effects_volume = 0.0
+	s.save(path)
+	var loaded: GameSettings = GameSettings.load_or_default(path)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	check(is_equal_approx(loaded.master_volume, 0.35) and is_equal_approx(loaded.engine_volume, 0.5)
+		and is_equal_approx(loaded.effects_volume, 0.0), "volume settings persist across a reload")
+	loaded.apply_audio()
+	var engine_bus: int = AudioServer.get_bus_index(GameSettings.BUS_ENGINE)
+	var effects_bus: int = AudioServer.get_bus_index(GameSettings.BUS_EFFECTS)
+	check(engine_bus > 0 and effects_bus > 0, "engine and effects buses exist")
+	check(absf(AudioServer.get_bus_volume_db(0) - linear_to_db(0.35)) < 0.01
+		and absf(AudioServer.get_bus_volume_db(engine_bus) - linear_to_db(0.5)) < 0.01, "bus volumes follow the settings")
+	check(AudioServer.is_bus_mute(effects_bus), "zero volume mutes the effects bus")
+	loaded.apply_audio()
+	check(AudioServer.bus_count == 3, "applying twice adds no duplicate buses")

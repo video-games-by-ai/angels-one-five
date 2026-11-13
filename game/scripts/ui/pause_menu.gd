@@ -1,6 +1,7 @@
 class_name PauseMenu
 extends Control
-## Escape menu with the player settings. Changes apply immediately and persist.
+## Settings panel: the Escape menu in flight, and the Settings screen from the
+## hangar. Changes apply immediately and persist to user://settings.cfg.
 
 signal resumed
 signal settings_changed
@@ -11,6 +12,9 @@ const TEXT: Color = Color("fbf4e6")
 
 var settings: GameSettings
 var panel: PanelContainer
+var title: Label
+var resume: Button
+var hangar: Button
 
 
 func build(game_settings: GameSettings) -> void:
@@ -37,7 +41,7 @@ func build(game_settings: GameSettings) -> void:
 	box.add_theme_constant_override("separation", 14)
 	margin.add_child(box)
 
-	var title: Label = Label.new()
+	title = Label.new()
 	title.text = "PAUSED"
 	title.add_theme_font_size_override("font_size", 26)
 	box.add_child(title)
@@ -46,7 +50,9 @@ func build(game_settings: GameSettings) -> void:
 	_check(box, "Invert vertical mouse", settings.invert_y, func(v: bool) -> void: settings.invert_y = v)
 	_check(box, "Assisted levelling", settings.level_assist, func(v: bool) -> void: settings.level_assist = v)
 	_slider(box, "Camera shake", 0.0, 1.5, 0.05, settings.camera_shake, func(v: float) -> void: settings.camera_shake = v)
-	_slider(box, "Volume", 0.0, 1.0, 0.05, settings.master_volume, func(v: float) -> void: settings.master_volume = v)
+	_slider(box, "Master volume", 0.0, 1.0, 0.05, settings.master_volume, func(v: float) -> void: settings.master_volume = v, true)
+	_slider(box, "Engine & wind volume", 0.0, 1.0, 0.05, settings.engine_volume, func(v: float) -> void: settings.engine_volume = v, true)
+	_slider(box, "Guns & effects volume", 0.0, 1.0, 0.05, settings.effects_volume, func(v: float) -> void: settings.effects_volume = v, true)
 	var quality_row: HBoxContainer = _row(box, "Graphics quality")
 	var quality: OptionButton = OptionButton.new()
 	for name in GameSettings.QUALITY_NAMES:
@@ -63,12 +69,12 @@ func build(game_settings: GameSettings) -> void:
 	var buttons: HBoxContainer = HBoxContainer.new()
 	buttons.add_theme_constant_override("separation", 12)
 	box.add_child(buttons)
-	var resume: Button = Button.new()
+	resume = Button.new()
 	resume.text = "Resume"
 	resume.custom_minimum_size = Vector2(150, 46)
 	resume.pressed.connect(func() -> void: resumed.emit())
 	buttons.add_child(resume)
-	var hangar: Button = Button.new()
+	hangar = Button.new()
 	hangar.text = "Change aircraft"
 	hangar.custom_minimum_size = Vector2(180, 46)
 	hangar.pressed.connect(func() -> void: hangar_requested.emit())
@@ -79,6 +85,15 @@ func build(game_settings: GameSettings) -> void:
 	quit.pressed.connect(func() -> void: quit_requested.emit())
 	buttons.add_child(quit)
 	visible = false
+
+
+## Show the panel: as the pause menu in flight, or opened from the hangar,
+## where it only offers a way back.
+func open(from_hangar: bool) -> void:
+	title.text = "SETTINGS" if from_hangar else "PAUSED"
+	resume.text = "Back" if from_hangar else "Resume"
+	hangar.visible = not from_hangar
+	visible = true
 
 
 func _changed() -> void:
@@ -96,7 +111,7 @@ func _row(box: VBoxContainer, label_text: String) -> HBoxContainer:
 	return row
 
 
-func _slider(box: VBoxContainer, label_text: String, lo: float, hi: float, step: float, value: float, apply: Callable) -> void:
+func _slider(box: VBoxContainer, label_text: String, lo: float, hi: float, step: float, value: float, apply: Callable, percent: bool = false) -> void:
 	var row: HBoxContainer = _row(box, label_text)
 	var slider: HSlider = HSlider.new()
 	slider.min_value = lo
@@ -105,11 +120,13 @@ func _slider(box: VBoxContainer, label_text: String, lo: float, hi: float, step:
 	slider.value = value
 	slider.custom_minimum_size = Vector2(200, 32)
 	var readout: Label = Label.new()
-	readout.custom_minimum_size = Vector2(46, 0)
-	readout.text = "%.2f" % value
+	readout.custom_minimum_size = Vector2(52, 0)
+	readout.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	var shown: Callable = func(v: float) -> String: return ("%d%%" % roundi(v * 100.0)) if percent else ("%.2f" % v)
+	readout.text = shown.call(value)
 	slider.value_changed.connect(func(v: float) -> void:
 		apply.call(v)
-		readout.text = "%.2f" % v
+		readout.text = shown.call(v)
 		_changed())
 	row.add_child(slider)
 	row.add_child(readout)

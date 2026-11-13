@@ -66,6 +66,7 @@ func explosion(at: Vector3, scale_factor: float = 1.0) -> void:
 	tween.tween_property(flash, "light_energy", 0.0, 0.5)
 	var sound: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
 	sound.stream = boom
+	sound.bus = GameSettings.BUS_EFFECTS
 	sound.unit_size = 160.0
 	sound.max_distance = 6000.0
 	sound.volume_db = 6.0

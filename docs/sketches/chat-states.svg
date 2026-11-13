@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 700" width="1600" height="700" font-family="Montserrat, 'DejaVu Sans', Arial, sans-serif">
+<defs>
+  <linearGradient id="chatBack" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#0e0c09" stop-opacity="0.54"/>
+    <stop offset="0.8" stop-color="#0e0c09" stop-opacity="0.48"/>
+    <stop offset="1" stop-color="#0e0c09" stop-opacity="0.06"/>
+  </linearGradient>
+  <linearGradient id="hillG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#56675c"/><stop offset="1" stop-color="#2c3730"/></linearGradient>
+  <linearGradient id="snowG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f1f4f6"/><stop offset="1" stop-color="#c6d1d9"/></linearGradient>
+  <linearGradient id="duskG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8f9db3"/><stop offset="0.7" stop-color="#e9c392"/><stop offset="1" stop-color="#f3d7a6"/></linearGradient>
+  <linearGradient id="lifeG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbf4e6"/><stop offset="1" stop-color="#fbf4e6" stop-opacity="0"/></linearGradient>
+</defs>
+<rect width="1600" height="700" fill="#17130e"/>
+<text x="25" y="36" font-size="13" font-weight="600" letter-spacing="0.6" fill="#e6d8bf">CHAT, STEP BY STEP</text>
+<text x="1575" y="36" font-size="13" fill="#e6d8bf" text-anchor="end" opacity="0.8">Each picture is the bottom-left corner of the screen</text>
+<clipPath id="pc1"><rect x="25" y="58" width="500" height="230" rx="6"/></clipPath>
+<g clip-path="url(#pc1)"><g transform="translate(25,58)">
+<rect width="500" height="230" fill="url(#hillG)"/>
+<polygon points="0,96 70,62 150,84 250,40 350,78 430,52 500,70 500,0 0,0" fill="#5d7065" opacity="0.55"/>
+<polygon points="0,230 0,170 120,140 260,168 380,128 500,150 500,230" fill="#1f2924" opacity="0.45"/>
+<rect x="358" y="188" width="200" height="42" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="378" y="216" font-size="11" font-weight="600" fill="#e6d8bf">HULL</text>
+<rect x="436" y="204" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="437" y="205" width="103" height="7" fill="#fbf4e6"/>
+<rect x="24" y="48" width="360" height="128" rx="3" fill="none" stroke="#fbf4e6" stroke-opacity="0.28" stroke-dasharray="4 5"/>
+<text x="204.0" y="117" font-size="11" fill="#fbf4e6" opacity="0.45" text-anchor="middle">chat appears here</text>
+</g></g>
+<rect x="25" y="58" width="500" height="230" rx="6" fill="none" stroke="rgba(255,214,150,0.30)" stroke-width="1"/>
+<circle cx="39" cy="316" r="12" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="39" y="321.0" text-anchor="middle" font-size="14" font-weight="700" fill="#2a1d08">1</text>
+<text x="61" y="321" font-size="16" font-weight="600" fill="#fbf4e6">Quiet</text>
+<text x="61" y="343" font-size="13" fill="#e6d8bf">Nothing is drawn until someone talks.</text>
+<clipPath id="pc2"><rect x="550" y="58" width="500" height="230" rx="6"/></clipPath>
+<g clip-path="url(#pc2)"><g transform="translate(550,58)">
+<rect width="500" height="230" fill="url(#hillG)"/>
+<polygon points="0,96 70,62 150,84 250,40 350,78 430,52 500,70 500,0 0,0" fill="#5d7065" opacity="0.55"/>
+<polygon points="0,230 0,170 120,140 260,168 380,128 500,150 500,230" fill="#1f2924" opacity="0.45"/>
+<rect x="358" y="188" width="200" height="42" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="378" y="216" font-size="11" font-weight="600" fill="#e6d8bf">HULL</text>
+<rect x="436" y="204" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="437" y="205" width="103" height="7" fill="#fbf4e6"/>
+<g opacity="0.8"><rect x="24" y="129.5" width="252" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="143" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ffc766">FALCO</tspan><tspan dx="8" fill="#fbf4e6">thanks, you nearly had me</tspan></text></g>
+<g opacity="0.8"><rect x="24" y="109.5" width="132" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="123" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ff7a4d">MARA</tspan><tspan dx="8" fill="#fbf4e6">nice turn</tspan></text></g>
+<rect x="24" y="152" width="360" height="24" rx="3" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="33" y="168" font-size="9.5" font-weight="600" letter-spacing="0.6" fill="#ffc766">SAY</text>
+<text x="64" y="168.5" font-size="12" fill="#fbf4e6"><tspan dx="1.5" fill="#ffc766" font-weight="600">|</tspan></text>
+<text x="374" y="168" font-size="9.5" fill="#e6d8bf" opacity="0.75" text-anchor="end">ENTER send  ·  ESC cancel</text>
+<rect x="412" y="18" width="70" height="26" rx="5" fill="rgba(0,0,0,0.35)"/><rect x="412" y="16" width="70" height="26" rx="5" fill="rgba(60,52,42,0.92)" stroke="rgba(251,244,230,0.75)" stroke-width="1"/><text x="447.0" y="33.5" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.8" fill="#fbf4e6">ENTER</text>
+</g></g>
+<rect x="550" y="58" width="500" height="230" rx="6" fill="none" stroke="rgba(255,214,150,0.30)" stroke-width="1"/>
+<circle cx="564" cy="316" r="12" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="564" y="321.0" text-anchor="middle" font-size="14" font-weight="700" fill="#2a1d08">2</text>
+<text x="586" y="321" font-size="16" font-weight="600" fill="#fbf4e6">Press ENTER</text>
+<text x="586" y="343" font-size="13" fill="#e6d8bf">One thin line opens. Recent messages come back while it is open.</text>
+<clipPath id="pc3"><rect x="1075" y="58" width="500" height="230" rx="6"/></clipPath>
+<g clip-path="url(#pc3)"><g transform="translate(1075,58)">
+<rect width="500" height="230" fill="url(#hillG)"/>
+<polygon points="0,96 70,62 150,84 250,40 350,78 430,52 500,70 500,0 0,0" fill="#5d7065" opacity="0.55"/>
+<polygon points="0,230 0,170 120,140 260,168 380,128 500,150 500,230" fill="#1f2924" opacity="0.45"/>
+<rect x="358" y="188" width="200" height="42" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="378" y="216" font-size="11" font-weight="600" fill="#e6d8bf">HULL</text>
+<rect x="436" y="204" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="437" y="205" width="103" height="7" fill="#fbf4e6"/>
+<g opacity="0.8"><rect x="24" y="129.5" width="252" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="143" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ffc766">FALCO</tspan><tspan dx="8" fill="#fbf4e6">thanks, you nearly had me</tspan></text></g>
+<g opacity="0.8"><rect x="24" y="109.5" width="132" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="123" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ff7a4d">MARA</tspan><tspan dx="8" fill="#fbf4e6">nice turn</tspan></text></g>
+<rect x="24" y="152" width="360" height="24" rx="3" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="33" y="168" font-size="9.5" font-weight="600" letter-spacing="0.6" fill="#ffc766">SAY</text>
+<text x="64" y="168.5" font-size="12" fill="#fbf4e6">break left, he is on your tail<tspan dx="1.5" fill="#ffc766" font-weight="600">|</tspan></text>
+</g></g>
+<rect x="1075" y="58" width="500" height="230" rx="6" fill="none" stroke="rgba(255,214,150,0.30)" stroke-width="1"/>
+<circle cx="1089" cy="316" r="12" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="1089" y="321.0" text-anchor="middle" font-size="14" font-weight="700" fill="#2a1d08">3</text>
+<text x="1111" y="321" font-size="16" font-weight="600" fill="#fbf4e6">Type</text>
+<text x="1111" y="343" font-size="13" fill="#e6d8bf">Keys write instead of flying. The mouse still steers and fires.</text>
+<clipPath id="pc4"><rect x="25" y="378" width="500" height="230" rx="6"/></clipPath>
+<g clip-path="url(#pc4)"><g transform="translate(25,378)">
+<rect width="500" height="230" fill="url(#hillG)"/>
+<polygon points="0,96 70,62 150,84 250,40 350,78 430,52 500,70 500,0 0,0" fill="#5d7065" opacity="0.55"/>
+<polygon points="0,230 0,170 120,140 260,168 380,128 500,150 500,230" fill="#1f2924" opacity="0.45"/>
+<rect x="358" y="188" width="200" height="42" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="378" y="216" font-size="11" font-weight="600" fill="#e6d8bf">HULL</text>
+<rect x="436" y="204" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="437" y="205" width="103" height="7" fill="#fbf4e6"/>
+<g opacity="1.0"><rect x="24" y="129.5" width="286" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="143" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ffc766">FALCO</tspan><tspan dx="8" fill="#fbf4e6">break left, he is on your tail</tspan></text></g>
+<g opacity="0.8"><rect x="24" y="109.5" width="252" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="123" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ffc766">FALCO</tspan><tspan dx="8" fill="#fbf4e6">thanks, you nearly had me</tspan></text></g>
+<g opacity="0.8"><rect x="24" y="89.5" width="132" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="103" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ff7a4d">MARA</tspan><tspan dx="8" fill="#fbf4e6">nice turn</tspan></text></g>
+<rect x="412" y="18" width="70" height="26" rx="5" fill="rgba(0,0,0,0.35)"/><rect x="412" y="16" width="70" height="26" rx="5" fill="rgba(60,52,42,0.92)" stroke="rgba(251,244,230,0.75)" stroke-width="1"/><text x="447.0" y="33.5" text-anchor="middle" font-size="11" font-weight="600" letter-spacing="0.8" fill="#fbf4e6">ENTER</text>
+</g></g>
+<rect x="25" y="378" width="500" height="230" rx="6" fill="none" stroke="rgba(255,214,150,0.30)" stroke-width="1"/>
+<circle cx="39" cy="636" r="12" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="39" y="641.0" text-anchor="middle" font-size="14" font-weight="700" fill="#2a1d08">4</text>
+<text x="61" y="641" font-size="16" font-weight="600" fill="#fbf4e6">ENTER sends</text>
+<text x="61" y="663" font-size="13" fill="#e6d8bf">The line closes. Your message joins the list, your name in amber.</text>
+<clipPath id="pc5"><rect x="550" y="378" width="500" height="230" rx="6"/></clipPath>
+<g clip-path="url(#pc5)"><g transform="translate(550,378)">
+<rect width="500" height="230" fill="url(#snowG)"/>
+<polygon points="0,120 90,60 170,104 280,30 370,96 500,44 500,230 0,230" fill="#aebfcd" opacity="0.45"/>
+<polygon points="210,82 280,30 318,62 276,70 250,98" fill="#5c646d" opacity="0.45"/>
+<polygon points="40,150 110,118 150,150 96,168" fill="#5c646d" opacity="0.30"/>
+<rect x="358" y="188" width="200" height="42" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="378" y="216" font-size="11" font-weight="600" fill="#e6d8bf">HULL</text>
+<rect x="436" y="204" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="437" y="205" width="103" height="7" fill="#fbf4e6"/>
+<g opacity="1.0"><rect x="24" y="129.5" width="162" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="143" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ffc766">FALCO</tspan><tspan dx="8" fill="#fbf4e6">covering you</tspan></text></g>
+<g opacity="1.0"><rect x="24" y="109.5" width="262" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="123" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#fbf4e6">IVO</tspan><tspan dx="8" fill="#fbf4e6">smoking, heading for the lake</tspan></text></g>
+<g opacity="1.0"><rect x="24" y="89.5" width="146" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="103" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ff7a4d">MARA</tspan><tspan dx="8" fill="#fbf4e6">too late :)</tspan></text></g>
+<g opacity="1.0"><rect x="24" y="69.5" width="124" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="83" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#fbf4e6">IVO</tspan><tspan dx="8" fill="#fbf4e6">I see him</tspan></text></g>
+<g opacity="0.3"><rect x="24" y="49.5" width="286" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="63" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ffc766">FALCO</tspan><tspan dx="8" fill="#fbf4e6">break left, he is on your tail</tspan></text></g>
+<path d="M398,58 L398,40 M393,46 L398,39 L403,46" fill="none" stroke="#2a1d08" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><text x="410" y="52" font-size="10.5" font-weight="600" fill="#2a1d08">oldest leaves</text>
+</g></g>
+<rect x="550" y="378" width="500" height="230" rx="6" fill="none" stroke="rgba(255,214,150,0.30)" stroke-width="1"/>
+<circle cx="564" cy="636" r="12" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="564" y="641.0" text-anchor="middle" font-size="14" font-weight="700" fill="#2a1d08">5</text>
+<text x="586" y="641" font-size="16" font-weight="600" fill="#fbf4e6">Everyone sees the same lines</text>
+<text x="586" y="663" font-size="13" fill="#e6d8bf">Newest at the bottom, 5 lines at most. A sixth pushes the oldest out.</text>
+<clipPath id="pc6"><rect x="1075" y="378" width="500" height="230" rx="6"/></clipPath>
+<g clip-path="url(#pc6)"><g transform="translate(1075,378)">
+<rect width="500" height="230" fill="url(#duskG)"/>
+<polygon points="0,200 110,150 210,186 330,132 440,176 500,150 500,230 0,230" fill="#7d8aa6" opacity="0.75"/>
+<rect x="358" y="188" width="200" height="42" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="378" y="216" font-size="11" font-weight="600" fill="#e6d8bf">HULL</text>
+<rect x="436" y="204" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="437" y="205" width="103" height="7" fill="#fbf4e6"/>
+<rect x="14" y="14" width="474" height="54" rx="3" fill="rgba(23,18,13,0.50)"/>
+<rect x="24" y="30" width="355.6" height="6" fill="#fbf4e6"/>
+<rect x="379.6" y="30" width="44.4" height="6" fill="url(#lifeG)"/>
+<line x1="24.0" y1="26" x2="24.0" y2="40" stroke="#fbf4e6" stroke-width="1" opacity="0.8"/>
+<text x="28.0" y="56" font-size="10.5" fill="#fbf4e6" text-anchor="start"><tspan font-weight="600">0 s</tspan>  sent</text>
+<line x1="379.6" y1="26" x2="379.6" y2="40" stroke="#fbf4e6" stroke-width="1" opacity="0.8"/>
+<text x="375.6" y="56" font-size="10.5" fill="#fbf4e6" text-anchor="end"><tspan font-weight="600">8 s</tspan>  starts to fade</text>
+<line x1="424.0" y1="26" x2="424.0" y2="40" stroke="#fbf4e6" stroke-width="1" opacity="0.8"/>
+<text x="428.0" y="56" font-size="10.5" fill="#fbf4e6" text-anchor="start"><tspan font-weight="600">9 s</tspan>  gone</text>
+<g opacity="1.0"><rect x="24" y="129.5" width="126" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="143" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ff7a4d">MARA</tspan><tspan dx="8" fill="#fbf4e6">hurry up</tspan></text></g>
+<g opacity="0.5"><rect x="24" y="109.5" width="141" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="123" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ffc766">FALCO</tspan><tspan dx="8" fill="#fbf4e6">on my way</tspan></text></g>
+<g opacity="0.14"><rect x="24" y="89.5" width="195" height="18" rx="3" fill="url(#chatBack)"/><text x="32" y="103" font-size="12" stroke="#0e0c09" stroke-opacity="0.6" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"><tspan font-size="11" font-weight="600" letter-spacing="0.4" fill="#ff7a4d">MARA</tspan><tspan dx="8" fill="#fbf4e6">see you at the dam</tspan></text></g>
+<text x="262" y="143" font-size="10.5" font-weight="600" fill="#2a1d08" opacity="0.85">2 s old</text>
+<text x="262" y="123" font-size="10.5" font-weight="600" fill="#2a1d08" opacity="0.85">8.5 s old</text>
+<text x="262" y="103" font-size="10.5" font-weight="600" fill="#2a1d08" opacity="0.85">8.9 s old</text>
+</g></g>
+<rect x="1075" y="378" width="500" height="230" rx="6" fill="none" stroke="rgba(255,214,150,0.30)" stroke-width="1"/>
+<circle cx="1089" cy="636" r="12" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="1089" y="641.0" text-anchor="middle" font-size="14" font-weight="700" fill="#2a1d08">6</text>
+<text x="1111" y="641" font-size="16" font-weight="600" fill="#fbf4e6">Fade away</text>
+<text x="1111" y="663" font-size="13" fill="#e6d8bf">A message stays 8 seconds, then fades out over 1 second.</text>
+</svg>

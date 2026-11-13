@@ -8,9 +8,11 @@ a mountain lake, cumulus clouds and sun glare.
 ![Low over the valley floor](docs/screenshots/valley-low.png)
 ![Over the lake into the sun](docs/screenshots/lake-sun.png)
 
-**Status: milestones 1-3 of 5.** Three flyable aircraft, a selection screen,
-guns, damage and two AI opponents. Rockets, practice targets and multiplayer are
-still to come (see [Roadmap](#roadmap)).
+**Status: milestones 1-4 of 5.** Three flyable aircraft, a selection screen,
+guns, damage, two AI opponents, and online matches for 2 to 4 players. Online
+play is tested on one machine. A match between two homes, and Windows against
+Linux, are still to do, as are rockets and practice targets (see
+[Roadmap](#roadmap)).
 
 ## The aircraft
 
@@ -68,7 +70,7 @@ open `game/project.godot` and press F5.
 | A / D | Manual roll |
 | Q / E | Rudder |
 | C | Re-centre the aim on the nose |
-| Esc | Pause menu, settings and Change aircraft |
+| Esc | Pause menu, settings and Change aircraft (on the selection screen: settings) |
 | 1 / 2 / 3, ← / →, Enter | Choose and fly an aircraft on the selection screen |
 | M | Change map on the selection screen |
 | F11 | Fullscreen |
@@ -100,17 +102,49 @@ The selection screen has a **Map** button (or press M). The choice is remembered
 ![Plav & Gusinje: Gusinje and the Ropojana valley](docs/screenshots/plav-gusinje.png)
 ![Plav & Gusinje: the high Prokletije south of Gusinje](docs/screenshots/plav-peaks.png)
 
-### Settings (Esc)
+### Settings (Esc, or Settings on the selection screen)
 
 Mouse sensitivity, inverted vertical mouse, assisted levelling, camera shake,
-volume, graphics quality (Low / Medium / High) and fullscreen. Settings and the
-last aircraft flown are saved to Godot's user folder (`settings.cfg`).
+master volume, engine & wind volume, guns & effects volume, graphics quality
+(Low / Medium / High) and fullscreen. Changes apply at once and are saved, with
+the last aircraft and map, to Godot's user folder (`settings.cfg`), so they are
+kept for the next launch.
 
 **Weather test:** the day is clear, with a few local snow showers: sunlit veils
 of falling snow with low visibility inside and a light dusting of fresh snow on
 the ground and trees beneath them. One sits in the valley ahead of the start.
 F4 or the "Snow showers" setting turns them off and on for comparison
 (`--weather=0|1` on the command line).
+
+### Online play
+
+Free-for-all for 2 to 4 players; the first to 5 kills wins. One player hosts,
+and only the host opens a port. Everyone else just pastes an invite and installs
+nothing.
+
+1. **Host:** choose an aircraft, press **Host match**, then:
+   - forward **UDP 24555** to your computer in your router once, or tick
+     **Open port automatically (UPnP)** (off unless you choose it; the port is
+     closed again when you stop hosting);
+   - allow Airflight through your computer's firewall when it asks;
+   - press **Detect** (or type your public address or a dynamic DNS name);
+   - press **Copy invite** and send it to your friends in a private chat.
+2. **Friends:** choose an aircraft, press **Join match**, **Paste**, **Join**.
+3. The host sees who is in (and can **Kick**), and presses **Start match**. After
+   the result everyone is back in the lobby; Start match again is the rematch.
+
+The invite works like a password. The connection is encrypted, a joiner checks
+it has reached the real host, and the host lets in only games holding the
+invite's secret. Five failed attempts from one address block it for ten minutes.
+If your provider shares one address between customers (carrier-grade NAT), port
+forwarding cannot work: the lobby warns about it, and someone else should host.
+Esc during an online match opens the settings without pausing the others; its
+middle button ends the match (host) or leaves it.
+
+If nobody can open a port, a small rented server can host with no pilot of its
+own: `./Airflight.x86_64 --headless -- --server --address=SERVER_IP` prints the
+invite and starts a match whenever two players are in. Design, security and test
+results: [docs/multiplayer-design.md](docs/multiplayer-design.md).
 
 ## Performance
 
@@ -195,10 +229,20 @@ route for the AI, snow shower sites and the look (snow line, colours).
 The release script also runs the headless flight tests in
 `game/tests/test_flight.gd`. They cover terrain sampling, turning, climbing,
 levelling, boost, collision, class balance, mouse/invert handling, fire rates,
-hits and misses, time to kill per aircraft, damage zones and their effects, and
+hits and misses, time to kill per aircraft, damage zones and their effects, the
+slowdown of burning aircraft, the trail stages, health dots, radar placement, and
 AI pilots hunting for three minutes without crashing. The Plav & Gusinje map is
 checked too: lake level, summit height and place, the route, the autopilot flying
 it end to end and AI pilots hunting over it without crashing.
+
+`game/tests/test_net.gd` checks online play: invites and every message type
+(including truncated, damaged and random packets), the host's rules for motion
+reports, hits, kills, respawns and the result, remote aircraft smoothing under
+packet loss, and real loopback connections for each security rule (wrong
+certificate, wrong or missing secret, blocking, unencrypted clients, junk
+packets, version mismatch, Kick, New invite). `tools/net_smoke.sh` plays a whole
+match between two headless copies of the game flown by the AI
+(`AIRFLIGHT_SERVER=1` for a dedicated server and two players).
 
 For an unattended demo, `--ai-player` lets an AI fly and fight for you, and
 `--aircraft=0|1|2` skips the selection screen:
@@ -209,6 +253,8 @@ For an unattended demo, `--ai-player` lets an AI fly and fight for you, and
 
 `--map=alpine|plav` picks the map, and `--view=X,Y,Z,YAW,PITCH` (with
 `--autopilot --no-hud --screenshot=...`) takes a picture from a fixed camera.
+`--opponent-hull=0.9,0.5,0.15` starts the opponents already damaged, to check
+the trail, smoke and health-dot stages.
 
 ### Code layout (`game/scripts/`)
 
@@ -217,7 +263,8 @@ For an unattended demo, `--ai-player` lets an AI fly and fight for you, and
 - `combat/`: bullets and tracers, combatants (player and AI alike), AI pilot
 - `input/`: `FlightCommand`, the device-independent pilot intent, and the mouse/keyboard source
 - `camera/`: chase camera with boost pull-back and adjustable shake
-- `ui/`: aircraft selection, HUD with target markers and the see-through airframe damage panel, lens flare, pause menu
+- `net/`: online play: invite, message format, session (encryption, secret check, lobby), the host's referee, remote aircraft smoothing, UPnP and address detection
+- `ui/`: aircraft selection, online lobby, HUD with target markers and the see-through airframe damage panel, lens flare, pause menu
 
 Flight runs on a fixed 60 Hz step and is rendered with physics interpolation. All
 pilot input goes through `FlightCommand`, so gamepad, touch, AI or network input
@@ -226,12 +273,12 @@ can be added without changing the flight code.
 ## Roadmap
 
 1. **Flyable scene (done):** valley, lighting, clouds, forests, lake, Mustang, flight model, chase camera, HUD, settings, audio, Linux/Windows builds, benchmark.
-2. **Combat (mostly done):** guns with tracers, muzzle flash, hit sparks and sounds, hit confirmation, a lead ring as aim help, damage zones driving the airframe panel and smoke and fire trails, AI fighters that pursue, evade and explode. Still to do: limited rockets and static practice targets.
-3. **Aircraft choice (done):** Spitfire Mk IX, P-51D Mustang and P-47D Thunderbolt, each with its own engine and gun sound, and a selection screen before every sortie. Host Match / Join Match entries come with milestone 4.
-4. **1v1 multiplayer:** host/join with a pasted invite over one host-opened UDP port, server-authoritative damage and score, smooth remote aircraft, respawn and rematch. Team data is organised so 2v2 and 4v4 can follow. Design: [docs/multiplayer-design.md](docs/multiplayer-design.md).
+2. **Combat (mostly done):** guns with tracers, muzzle flash, hit sparks and sounds, hit confirmation, a lead ring as aim help, damage zones driving the airframe panel, a flight-path trail behind every aircraft that turns from a faint line to black smoke and fire as it is shot up (burning aircraft fly up to 28% slower), five health dots on the aircraft in front of the guns, a see-through radar map, AI fighters that pursue, evade and explode. Still to do: limited rockets and static practice targets. Design and sketches: [docs/combat-readability-design.md](docs/combat-readability-design.md).
+3. **Aircraft choice (done):** Spitfire Mk IX, P-51D Mustang and P-47D Thunderbolt, each with its own engine and gun sound, and a selection screen before every sortie, with Host match and Join match entries.
+4. **Multiplayer (built, tested on one machine):** host/join with a pasted invite over one host-opened UDP port, 2 to 4 players free-for-all, host-decided damage and score, smooth remote aircraft, respawn and rematch, UPnP and address help, and a dedicated server mode. Still to do: a match between two homes over the internet. Design: [docs/multiplayer-design.md](docs/multiplayer-design.md).
 5. **Release check:** run natively on Windows, cross-play between Windows and Linux, and a final performance pass.
 
-Phones (Android/iOS) would be a later project. They need touch controls, a lighter graphics tier and a relay server for online play.
+Phones (Android/iOS) would be a later project. They need touch controls, a lighter graphics tier and the dedicated server for online play.
 
 ## Licence
 

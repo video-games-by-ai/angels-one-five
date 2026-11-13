@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1100 600" width="1100" height="600" font-family="Montserrat, 'DejaVu Sans', Arial, sans-serif">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3f5f8c"/>
+    <stop offset="0.5" stop-color="#8f9db3"/>
+    <stop offset="0.8" stop-color="#e9c392"/>
+    <stop offset="1" stop-color="#f3d7a6"/>
+  </linearGradient>
+  <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f3d7a6" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#f3d7a6" stop-opacity="0"/>
+  </linearGradient>
+  <g id="plane-side">
+    <path d="M45,0 C40,-7 20,-9 5,-9 L-4,-14 L-14,-14 L-18,-8 L-38,-5 L-48,-21 L-55,-21 L-51,-3 L-51,3 L-38,5 C-10,9 25,9 45,0 Z" fill="#59605f" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-4,-13 L-13,-13 L-16,-9 L3,-9 Z" fill="#b9d3df" opacity="0.8"/>
+    <ellipse cx="2" cy="3" rx="19" ry="3.2" fill="#3c4241"/>
+    <line x1="46" y1="-17" x2="46" y2="17" stroke="#2c302f" stroke-width="1.5" opacity="0.6"/>
+    <circle cx="-22" cy="-1" r="4" fill="#f2b33d"/>
+  </g>
+  <g id="plane-rear">
+    <circle cx="0" cy="0" r="30" fill="none" stroke="#fbf4e6" stroke-width="1" opacity="0.25"/>
+    <path d="M-92,3 Q-40,-5 0,-3 Q40,-5 92,3 L92,7 Q40,5 0,9 Q-40,5 -92,7 Z" fill="#aab0b3" stroke="#2c302f" stroke-width="1"/>
+    <ellipse cx="0" cy="0" rx="12" ry="14" fill="#c5cacc" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-2,-12 L0,-40 L2,-12 Z" fill="#f2b33d" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-34,-6 L34,-6 L34,-3 L-34,-3 Z" fill="#aab0b3" stroke="#2c302f" stroke-width="1"/>
+    <ellipse cx="0" cy="-9" rx="6" ry="5" fill="#b9d3df" opacity="0.8"/>
+  </g>
+  <linearGradient id="t0" gradientUnits="userSpaceOnUse" x1="800" y1="0" x2="330" y2="0">
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+    <stop offset="0.06" stop-color="#ffffff" stop-opacity="0.42"/>
+    <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="t1" gradientUnits="userSpaceOnUse" x1="800" y1="0" x2="330" y2="0">
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+    <stop offset="0.06" stop-color="#ffffff" stop-opacity="0.8"/>
+    <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="t2" gradientUnits="userSpaceOnUse" x1="800" y1="0" x2="330" y2="0">
+    <stop offset="0" stop-color="#9a9a9a" stop-opacity="0"/>
+    <stop offset="0.06" stop-color="#9a9a9a" stop-opacity="0.8"/>
+    <stop offset="1" stop-color="#9a9a9a" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="t3" gradientUnits="userSpaceOnUse" x1="800" y1="0" x2="330" y2="0">
+    <stop offset="0" stop-color="#3a3836" stop-opacity="0"/>
+    <stop offset="0.06" stop-color="#3a3836" stop-opacity="0.85"/>
+    <stop offset="1" stop-color="#3a3836" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="t4" gradientUnits="userSpaceOnUse" x1="800" y1="0" x2="330" y2="0">
+    <stop offset="0" stop-color="#161514" stop-opacity="0"/>
+    <stop offset="0.06" stop-color="#161514" stop-opacity="0.92"/>
+    <stop offset="1" stop-color="#161514" stop-opacity="0"/>
+  </linearGradient>
+  <radialGradient id="fire">
+    <stop offset="0" stop-color="#fff2b0"/>
+    <stop offset="0.45" stop-color="#ffa53a"/>
+    <stop offset="1" stop-color="#e0401a" stop-opacity="0"/>
+  </radialGradient>
+</defs>
+
+<rect width="1100" height="600" fill="url(#sky)"/>
+<rect width="1100" height="600" fill="#31507c" opacity="0.35"/>
+<text x="40" y="44" font-size="12.5" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">HULL</text>
+<text x="330" y="44" font-size="12.5" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">TRAIL (about 4 seconds of flight path, 500 m)</text>
+<text x="915" y="44" font-size="12.5" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">SPEED</text>
+<line x1="30" y1="150" x2="1070" y2="150" stroke="#fbf4e6" stroke-width="1" opacity="0.10"/>
+<g opacity="0.9">
+<circle cx="64.0" cy="92.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="64.0" cy="92.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="80.0" cy="92.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="80.0" cy="92.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="96.0" cy="92.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="96.0" cy="92.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="112.0" cy="92.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="112.0" cy="92.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="128.0" cy="92.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="128.0" cy="92.0" r="5.0" fill="#ff5a4a"/>
+</g>
+<text x="96" y="120" font-size="13.5" font-weight="600" fill="#fbf4e6" text-anchor="middle" opacity="1.0">80 to 100%</text>
+<path d="M800,100 C700,97 600,103 500,98 S380,103 330,100" fill="none" stroke="url(#t0)" stroke-width="2.6" stroke-linecap="round"/>
+<use xlink:href="#plane-side" transform="translate(852,100) scale(0.95)"/>
+<text x="330" y="138" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Light, see-through line</text>
+<text x="915" y="106" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">full speed</text>
+<line x1="30" y1="250" x2="1070" y2="250" stroke="#fbf4e6" stroke-width="1" opacity="0.10"/>
+<g opacity="0.9">
+<circle cx="64.0" cy="192.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="64.0" cy="192.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="80.0" cy="192.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="80.0" cy="192.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="96.0" cy="192.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="96.0" cy="192.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="112.0" cy="192.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="112.0" cy="192.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="128.0" cy="192.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+</g>
+<text x="96" y="220" font-size="13.5" font-weight="600" fill="#fbf4e6" text-anchor="middle" opacity="1.0">60 to 80%</text>
+<path d="M800,200 C700,197 600,203 500,198 S380,203 330,200" fill="none" stroke="url(#t1)" stroke-width="4.5" stroke-linecap="round"/>
+<use xlink:href="#plane-side" transform="translate(852,200) scale(0.95)"/>
+<text x="330" y="238" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Solid white line</text>
+<text x="915" y="206" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">full speed</text>
+<line x1="30" y1="350" x2="1070" y2="350" stroke="#fbf4e6" stroke-width="1" opacity="0.10"/>
+<g opacity="0.9">
+<circle cx="64.0" cy="292.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="64.0" cy="292.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="80.0" cy="292.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="80.0" cy="292.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="96.0" cy="292.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="96.0" cy="292.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="112.0" cy="292.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+<circle cx="128.0" cy="292.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+</g>
+<text x="96" y="320" font-size="13.5" font-weight="600" fill="#fbf4e6" text-anchor="middle" opacity="1.0">40 to 60%</text>
+<path d="M800,300 C700,294 600,306 500,296 S380,306 330,300" fill="none" stroke="url(#t2)" stroke-width="8.0" stroke-linecap="round"/>
+<circle cx="780" cy="300" r="3.9" fill="#9a9a9a" opacity="0.44"/>
+<circle cx="748" cy="305" r="4.7" fill="#9a9a9a" opacity="0.40"/>
+<circle cx="715" cy="295" r="5.5" fill="#9a9a9a" opacity="0.36"/>
+<circle cx="683" cy="295" r="6.3" fill="#9a9a9a" opacity="0.32"/>
+<circle cx="651" cy="304" r="7.1" fill="#9a9a9a" opacity="0.28"/>
+<circle cx="618" cy="297" r="7.9" fill="#9a9a9a" opacity="0.25"/>
+<circle cx="586" cy="292" r="8.7" fill="#9a9a9a" opacity="0.21"/>
+<circle cx="554" cy="301" r="9.5" fill="#9a9a9a" opacity="0.17"/>
+<circle cx="522" cy="299" r="10.3" fill="#9a9a9a" opacity="0.14"/>
+<circle cx="489" cy="290" r="11.1" fill="#9a9a9a" opacity="0.11"/>
+<circle cx="457" cy="296" r="11.9" fill="#9a9a9a" opacity="0.08"/>
+<circle cx="425" cy="300" r="12.7" fill="#9a9a9a" opacity="0.05"/>
+<circle cx="392" cy="290" r="13.5" fill="#9a9a9a" opacity="0.02"/>
+<circle cx="360" cy="292" r="14.3" fill="#9a9a9a" opacity="0.00"/>
+<use xlink:href="#plane-side" transform="translate(852,300) scale(0.95)"/>
+<text x="330" y="338" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Grey smoke</text>
+<text x="915" y="306" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">full speed</text>
+<line x1="30" y1="450" x2="1070" y2="450" stroke="#fbf4e6" stroke-width="1" opacity="0.10"/>
+<g opacity="0.9">
+<circle cx="64.0" cy="392.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="64.0" cy="392.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="80.0" cy="392.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="80.0" cy="392.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="96.0" cy="392.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+<circle cx="112.0" cy="392.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+<circle cx="128.0" cy="392.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+</g>
+<text x="96" y="420" font-size="13.5" font-weight="600" fill="#fbf4e6" text-anchor="middle" opacity="1.0">20 to 40%</text>
+<path d="M800,400 C700,392 600,408 500,395 S380,408 330,400" fill="none" stroke="url(#t3)" stroke-width="11.0" stroke-linecap="round"/>
+<circle cx="780" cy="400" r="6.1" fill="#3a3836" opacity="0.47"/>
+<circle cx="748" cy="407" r="7.3" fill="#3a3836" opacity="0.42"/>
+<circle cx="715" cy="394" r="8.6" fill="#3a3836" opacity="0.38"/>
+<circle cx="683" cy="394" r="9.9" fill="#3a3836" opacity="0.34"/>
+<circle cx="651" cy="406" r="11.1" fill="#3a3836" opacity="0.30"/>
+<circle cx="618" cy="397" r="12.4" fill="#3a3836" opacity="0.26"/>
+<circle cx="586" cy="390" r="13.7" fill="#3a3836" opacity="0.22"/>
+<circle cx="554" cy="402" r="14.9" fill="#3a3836" opacity="0.18"/>
+<circle cx="522" cy="400" r="16.2" fill="#3a3836" opacity="0.15"/>
+<circle cx="489" cy="388" r="17.5" fill="#3a3836" opacity="0.11"/>
+<circle cx="457" cy="397" r="18.7" fill="#3a3836" opacity="0.08"/>
+<circle cx="425" cy="402" r="20.0" fill="#3a3836" opacity="0.05"/>
+<circle cx="392" cy="389" r="21.3" fill="#3a3836" opacity="0.02"/>
+<circle cx="360" cy="391" r="22.5" fill="#3a3836" opacity="0.00"/>
+<ellipse cx="798" cy="398" rx="20" ry="8" fill="url(#fire)" opacity="0.8"/>
+<use xlink:href="#plane-side" transform="translate(852,400) scale(0.95)"/>
+<text x="330" y="438" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Dark smoke, first flames</text>
+<text x="915" y="406" font-size="14.5" font-weight="600" fill="#ffc766" text-anchor="start" opacity="1.0">losing speed</text>
+<line x1="30" y1="550" x2="1070" y2="550" stroke="#fbf4e6" stroke-width="1" opacity="0.10"/>
+<g opacity="0.9">
+<circle cx="64.0" cy="492.0" r="6.4" fill="#000" opacity="0.30"/>
+<circle cx="64.0" cy="492.0" r="5.0" fill="#ff5a4a"/>
+<circle cx="80.0" cy="492.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+<circle cx="96.0" cy="492.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+<circle cx="112.0" cy="492.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+<circle cx="128.0" cy="492.0" r="4.3" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+</g>
+<text x="96" y="520" font-size="13.5" font-weight="600" fill="#fbf4e6" text-anchor="middle" opacity="1.0">under 20%</text>
+<path d="M800,500 C700,490 600,510 500,494 S380,510 330,500" fill="none" stroke="url(#t4)" stroke-width="14.0" stroke-linecap="round"/>
+<circle cx="780" cy="500" r="8.2" fill="#161514" opacity="0.51"/>
+<circle cx="748" cy="508" r="10.0" fill="#161514" opacity="0.46"/>
+<circle cx="715" cy="493" r="11.7" fill="#161514" opacity="0.41"/>
+<circle cx="683" cy="493" r="13.4" fill="#161514" opacity="0.37"/>
+<circle cx="651" cy="507" r="15.2" fill="#161514" opacity="0.33"/>
+<circle cx="618" cy="497" r="16.9" fill="#161514" opacity="0.28"/>
+<circle cx="586" cy="489" r="18.6" fill="#161514" opacity="0.24"/>
+<circle cx="554" cy="503" r="20.4" fill="#161514" opacity="0.20"/>
+<circle cx="522" cy="501" r="22.1" fill="#161514" opacity="0.16"/>
+<circle cx="489" cy="487" r="23.8" fill="#161514" opacity="0.12"/>
+<circle cx="457" cy="497" r="25.6" fill="#161514" opacity="0.09"/>
+<circle cx="425" cy="503" r="27.3" fill="#161514" opacity="0.05"/>
+<circle cx="392" cy="488" r="29.0" fill="#161514" opacity="0.02"/>
+<circle cx="360" cy="490" r="30.7" fill="#161514" opacity="0.00"/>
+<ellipse cx="787" cy="498" rx="36" ry="15" fill="url(#fire)" opacity="1.0"/>
+<use xlink:href="#plane-side" transform="translate(852,500) scale(0.95)"/>
+<text x="330" y="538" font-size="14.5" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Black smoke and fire</text>
+<text x="915" y="506" font-size="14.5" font-weight="600" fill="#ffc766" text-anchor="start" opacity="1.0">about 28% slower</text>
+</svg>

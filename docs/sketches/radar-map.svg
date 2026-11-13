@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1060 600" width="1060" height="600" font-family="Montserrat, 'DejaVu Sans', Arial, sans-serif">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3f5f8c"/>
+    <stop offset="0.5" stop-color="#8f9db3"/>
+    <stop offset="0.8" stop-color="#e9c392"/>
+    <stop offset="1" stop-color="#f3d7a6"/>
+  </linearGradient>
+  <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f3d7a6" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#f3d7a6" stop-opacity="0"/>
+  </linearGradient>
+  <g id="plane-side">
+    <path d="M45,0 C40,-7 20,-9 5,-9 L-4,-14 L-14,-14 L-18,-8 L-38,-5 L-48,-21 L-55,-21 L-51,-3 L-51,3 L-38,5 C-10,9 25,9 45,0 Z" fill="#59605f" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-4,-13 L-13,-13 L-16,-9 L3,-9 Z" fill="#b9d3df" opacity="0.8"/>
+    <ellipse cx="2" cy="3" rx="19" ry="3.2" fill="#3c4241"/>
+    <line x1="46" y1="-17" x2="46" y2="17" stroke="#2c302f" stroke-width="1.5" opacity="0.6"/>
+    <circle cx="-22" cy="-1" r="4" fill="#f2b33d"/>
+  </g>
+  <g id="plane-rear">
+    <circle cx="0" cy="0" r="30" fill="none" stroke="#fbf4e6" stroke-width="1" opacity="0.25"/>
+    <path d="M-92,3 Q-40,-5 0,-3 Q40,-5 92,3 L92,7 Q40,5 0,9 Q-40,5 -92,7 Z" fill="#aab0b3" stroke="#2c302f" stroke-width="1"/>
+    <ellipse cx="0" cy="0" rx="12" ry="14" fill="#c5cacc" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-2,-12 L0,-40 L2,-12 Z" fill="#f2b33d" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-34,-6 L34,-6 L34,-3 L-34,-3 Z" fill="#aab0b3" stroke="#2c302f" stroke-width="1"/>
+    <ellipse cx="0" cy="-9" rx="6" ry="5" fill="#b9d3df" opacity="0.8"/>
+  </g>
+  <radialGradient id="wedge300312" gradientUnits="userSpaceOnUse" cx="300" cy="312" r="220">
+    <stop offset="0" stop-color="#fbf4e6" stop-opacity="0.30"/>
+    <stop offset="1" stop-color="#fbf4e6" stop-opacity="0.04"/>
+  </radialGradient>
+</defs>
+
+<rect width="1060" height="600" fill="url(#sky)"/>
+<polygon points="0,336 74,276 138,318 233,216 318,294 403,240 498,324 594,264 678,192 763,288 848,234 954,312 1060,252 1060,426 0,426" fill="#7d8aa6"/>
+<polygon points="0,336 74,276 138,318 233,216 318,294 403,240 498,324 594,264 678,192 763,288 848,234 954,312 1060,252 1060,426 0,426" fill="#ffffff" opacity="0.10"/>
+<rect x="0" y="324" width="1060" height="120" fill="url(#haze)"/>
+<polygon points="0,408 106,330 191,378 276,414 636,420 784,372 912,306 996,360 1060,336 1060,600 0,600" fill="#3e4d45"/>
+<ellipse cx="466" cy="468" rx="180" ry="21" fill="#8fb4c4" opacity="0.75"/>
+<rect x="0" y="414" width="1060" height="204" fill="#1c241f" opacity="0.25"/>
+
+<g>
+<circle cx="300" cy="312" r="220" fill="rgba(14,12,9,0.30)"/>
+<clipPath id="rc300312"><circle cx="300" cy="312" r="220"/></clipPath>
+<g clip-path="url(#rc300312)">
+<path d="M135,389 q66,-48 136,-18 q55,26 22,57 q-88,44 -158,-40 Z" fill="#9fd0e6" opacity="0.22"/>
+<path d="M80,191 q77,-48 154,-11 t143,-22 t154,22" fill="none" stroke="#fbf4e6" stroke-width="10.0" stroke-linecap="round" opacity="0.16"/>
+<path d="M80,470 q77,-48 154,-11 t143,-22 t154,22" fill="none" stroke="#fbf4e6" stroke-width="10.0" stroke-linecap="round" opacity="0.13"/>
+<path d="M300.0,312.0 L114.9,193.1 A220.0,220.0 0 0 1 119.8,185.8 Z" fill="#ffc766" opacity="0.240"/>
+<path d="M300.0,312.0 L110.8,199.7 A220.0,220.0 0 0 1 115.5,192.2 Z" fill="#ffc766" opacity="0.229"/>
+<path d="M300.0,312.0 L107.0,206.4 A220.0,220.0 0 0 1 111.4,198.7 Z" fill="#ffc766" opacity="0.219"/>
+<path d="M300.0,312.0 L103.5,213.1 A220.0,220.0 0 0 1 107.6,205.3 Z" fill="#ffc766" opacity="0.209"/>
+<path d="M300.0,312.0 L100.1,220.1 A220.0,220.0 0 0 1 104.0,212.1 Z" fill="#ffc766" opacity="0.199"/>
+<path d="M300.0,312.0 L97.0,227.1 A220.0,220.0 0 0 1 100.6,219.0 Z" fill="#ffc766" opacity="0.189"/>
+<path d="M300.0,312.0 L94.2,234.2 A220.0,220.0 0 0 1 97.5,226.0 Z" fill="#ffc766" opacity="0.179"/>
+<path d="M300.0,312.0 L91.6,241.5 A220.0,220.0 0 0 1 94.6,233.2 Z" fill="#ffc766" opacity="0.170"/>
+<path d="M300.0,312.0 L89.3,248.8 A220.0,220.0 0 0 1 92.0,240.4 Z" fill="#ffc766" opacity="0.161"/>
+<path d="M300.0,312.0 L87.2,256.2 A220.0,220.0 0 0 1 89.6,247.7 Z" fill="#ffc766" opacity="0.151"/>
+<path d="M300.0,312.0 L85.4,263.6 A220.0,220.0 0 0 1 87.5,255.1 Z" fill="#ffc766" opacity="0.143"/>
+<path d="M300.0,312.0 L83.8,271.2 A220.0,220.0 0 0 1 85.6,262.5 Z" fill="#ffc766" opacity="0.134"/>
+<path d="M300.0,312.0 L82.5,278.7 A220.0,220.0 0 0 1 84.0,270.0 Z" fill="#ffc766" opacity="0.125"/>
+<path d="M300.0,312.0 L81.5,286.3 A220.0,220.0 0 0 1 82.7,277.6 Z" fill="#ffc766" opacity="0.117"/>
+<path d="M300.0,312.0 L80.7,294.0 A220.0,220.0 0 0 1 81.6,285.2 Z" fill="#ffc766" opacity="0.109"/>
+<path d="M300.0,312.0 L80.2,301.6 A220.0,220.0 0 0 1 80.8,292.8 Z" fill="#ffc766" opacity="0.101"/>
+<path d="M300.0,312.0 L80.0,309.3 A220.0,220.0 0 0 1 80.3,300.5 Z" fill="#ffc766" opacity="0.094"/>
+<path d="M300.0,312.0 L80.1,317.0 A220.0,220.0 0 0 1 80.0,308.2 Z" fill="#ffc766" opacity="0.086"/>
+<path d="M300.0,312.0 L80.4,324.7 A220.0,220.0 0 0 1 80.0,315.8 Z" fill="#ffc766" opacity="0.079"/>
+<path d="M300.0,312.0 L80.9,332.3 A220.0,220.0 0 0 1 80.3,323.5 Z" fill="#ffc766" opacity="0.072"/>
+<path d="M300.0,312.0 L81.8,340.0 A220.0,220.0 0 0 1 80.8,331.2 Z" fill="#ffc766" opacity="0.066"/>
+<path d="M300.0,312.0 L82.9,347.6 A220.0,220.0 0 0 1 81.6,338.8 Z" fill="#ffc766" opacity="0.059"/>
+<path d="M300.0,312.0 L84.3,355.1 A220.0,220.0 0 0 1 82.7,346.4 Z" fill="#ffc766" opacity="0.053"/>
+<path d="M300.0,312.0 L85.9,362.6 A220.0,220.0 0 0 1 84.0,354.0 Z" fill="#ffc766" opacity="0.047"/>
+<path d="M300.0,312.0 L87.8,370.1 A220.0,220.0 0 0 1 85.6,361.5 Z" fill="#ffc766" opacity="0.041"/>
+<path d="M300.0,312.0 L90.0,377.4 A220.0,220.0 0 0 1 87.5,368.9 Z" fill="#ffc766" opacity="0.036"/>
+<path d="M300.0,312.0 L92.4,384.7 A220.0,220.0 0 0 1 89.6,376.3 Z" fill="#ffc766" opacity="0.031"/>
+<path d="M300.0,312.0 L95.0,391.9 A220.0,220.0 0 0 1 92.0,383.6 Z" fill="#ffc766" opacity="0.026"/>
+<path d="M300.0,312.0 L97.9,399.0 A220.0,220.0 0 0 1 94.6,390.8 Z" fill="#ffc766" opacity="0.022"/>
+<path d="M300.0,312.0 L101.1,406.0 A220.0,220.0 0 0 1 97.5,398.0 Z" fill="#ffc766" opacity="0.017"/>
+<path d="M300.0,312.0 L104.5,412.9 A220.0,220.0 0 0 1 100.6,405.0 Z" fill="#ffc766" opacity="0.014"/>
+<path d="M300.0,312.0 L108.1,419.7 A220.0,220.0 0 0 1 104.0,411.9 Z" fill="#ffc766" opacity="0.010"/>
+<path d="M300.0,312.0 L112.0,426.3 A220.0,220.0 0 0 1 107.6,418.7 Z" fill="#ffc766" opacity="0.007"/>
+<path d="M300.0,312.0 L116.1,432.8 A220.0,220.0 0 0 1 111.4,425.3 Z" fill="#ffc766" opacity="0.005"/>
+<path d="M300.0,312.0 L120.4,439.1 A220.0,220.0 0 0 1 115.5,431.8 Z" fill="#ffc766" opacity="0.002"/>
+<path d="M300.0,312.0 L125.0,445.3 A220.0,220.0 0 0 1 119.8,438.2 Z" fill="#ffc766" opacity="0.001"/>
+<path d="M300.0,312.0 L254.3,96.8 A220.0,220.0 0 0 1 519.9,304.3 Z" fill="url(#wedge300312)"/>
+</g>
+<line x1="300" y1="312" x2="254.3" y2="96.8" stroke="#fbf4e6" stroke-width="1.2" opacity="0.45"/>
+<line x1="300" y1="312" x2="519.9" y2="304.3" stroke="#fbf4e6" stroke-width="1.2" opacity="0.45"/>
+<line x1="300" y1="312" x2="119.8" y2="185.8" stroke="#ffc766" stroke-width="2.0" opacity="0.8"/>
+<circle cx="300" cy="312" r="73.3" fill="none" stroke="#fbf4e6" stroke-width="1.4" opacity="0.28"/>
+<circle cx="300" cy="312" r="146.7" fill="none" stroke="#fbf4e6" stroke-width="1.4" opacity="0.28"/>
+<circle cx="300" cy="312" r="220.0" fill="none" stroke="#fbf4e6" stroke-width="1.4" opacity="0.6"/>
+<line x1="80" y1="312" x2="520" y2="312" stroke="#fbf4e6" stroke-width="0.8" opacity="0.14"/>
+<line x1="300" y1="92" x2="300" y2="532" stroke="#fbf4e6" stroke-width="0.8" opacity="0.14"/>
+<text x="300" y="85" text-anchor="middle" font-size="18" font-weight="600" fill="#e6d8bf">N</text>
+<text x="367" y="328" text-anchor="end" font-size="12" fill="#e6d8bf" opacity="0.75">1.5</text>
+<text x="441" y="328" text-anchor="end" font-size="12" fill="#e6d8bf" opacity="0.75">3.0</text>
+<text x="514" y="328" text-anchor="end" font-size="12" fill="#e6d8bf" opacity="0.75">4.5 km</text>
+<circle cx="372.8" cy="255.1" r="8.5" fill="#000" opacity="0.35"/>
+<circle cx="372.8" cy="255.1" r="6.5" fill="#ff5a4a"/>
+<circle cx="260.0" cy="451.6" r="8.5" fill="#000" opacity="0.35"/>
+<circle cx="260.0" cy="451.6" r="6.5" fill="#ff5a4a"/>
+<circle cx="152.8" cy="148.5" r="6.5" fill="rgba(14,12,9,0.6)" stroke="#ff5a4a" stroke-width="2.0"/>
+<circle cx="369.9" cy="349.2" r="8.5" fill="#000" opacity="0.35"/>
+<circle cx="369.9" cy="349.2" r="6.5" fill="#fbf4e6"/>
+<circle cx="196.6" cy="349.6" r="8.5" fill="#000" opacity="0.35"/>
+<circle cx="196.6" cy="349.6" r="6.5" fill="#fbf4e6"/>
+<line x1="300" y1="312" x2="308.1" y2="293.7" stroke="#ffc766" stroke-width="2.4" stroke-linecap="round"/>
+<circle cx="300" cy="312" r="6.5" fill="#ffc766" stroke="#000" stroke-opacity="0.4" stroke-width="1"/>
+</g>
+<rect x="580" y="60" width="450" height="480" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="604" y="96" font-size="17" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">RADAR MAP</text>
+<line x1="622" y1="131" x2="631" y2="116" stroke="#ffc766" stroke-width="2.4" stroke-linecap="round"/><circle cx="622" cy="131" r="6.5" fill="#ffc766"/>
+<text x="656" y="136" font-size="15" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">You: always in the centre.</text>
+<text x="656" y="156" font-size="13.5" font-weight="400" fill="#e6d8bf" text-anchor="start" opacity="1.0">The short tick is where the nose points.</text>
+<path d="M616.0,198.0 L612.4,172.3 A26.0,26.0 0 0 1 641.4,192.6 Z" fill="#fbf4e6" opacity="0.30"/>
+<text x="656" y="194" font-size="15" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">What you see: the camera's field of view.</text>
+<text x="656" y="214" font-size="13.5" font-weight="400" fill="#e6d8bf" text-anchor="start" opacity="1.0">An aircraft inside the wedge is on screen.</text>
+<circle cx="622" cy="247" r="6.5" fill="#ff5a4a"/>
+<text x="656" y="252" font-size="15" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Enemy</text>
+<circle cx="622" cy="287" r="6.5" fill="#fbf4e6"/>
+<text x="656" y="292" font-size="15" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Friend</text>
+<circle cx="622" cy="327" r="6" fill="rgba(14,12,9,0.6)" stroke="#ff5a4a" stroke-width="2"/>
+<text x="656" y="332" font-size="15" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Beyond 4.5 km: a ring held on the rim,</text>
+<text x="656" y="352" font-size="13.5" font-weight="400" fill="#e6d8bf" text-anchor="start" opacity="1.0">in the direction to fly.</text>
+<circle cx="622" cy="385" r="9" fill="none" stroke="#fbf4e6" stroke-width="1.4" opacity="0.6"/><circle cx="622" cy="385" r="4" fill="none" stroke="#fbf4e6" stroke-width="1.2" opacity="0.4"/>
+<text x="656" y="390" font-size="15" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Range rings every 1.5 km.</text>
+<text x="656" y="410" font-size="13.5" font-weight="400" fill="#e6d8bf" text-anchor="start" opacity="1.0">The map itself stays still, north at the top.</text>
+<path d="M614.0,452.0 L618.5,426.4 A26.0,26.0 0 0 1 636.5,439.0 Z" fill="#ffc766" opacity="0.22"/><line x1="614" y1="452" x2="636.5" y2="439.0" stroke="#ffc766" stroke-width="2"/>
+<text x="656" y="448" font-size="15" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">Sweep: one turn every 3 seconds.</text>
+<text x="656" y="468" font-size="13.5" font-weight="400" fill="#e6d8bf" text-anchor="start" opacity="1.0">A dot glows briefly as the line passes it.</text>
+<text x="604" y="518" font-size="11.5" font-weight="400" fill="#e6d8bf" text-anchor="start" opacity="0.9">About 210 px across at 1080p · 30% dark fill, so the valley shows through it</text>
+</svg>

@@ -15,16 +15,17 @@ var active: bool = false
 
 
 func _ready() -> void:
-	engine = _player(null, -60.0, 1)
-	wind = _player(Sfx.looped("res://assets/audio/wind_loop.wav"), -60.0, 1)
+	engine = _player(null, -60.0, 1, GameSettings.BUS_ENGINE)
+	wind = _player(Sfx.looped("res://assets/audio/wind_loop.wav"), -60.0, 1, GameSettings.BUS_ENGINE)
 	wind.play()
-	guns = _player(null, -7.0, 8)
-	hit = _player(load("res://assets/audio/hit.wav"), -9.0, 4)
-	hurt = _player(load("res://assets/audio/hurt.wav"), -4.0, 4)
+	guns = _player(null, -7.0, 8, GameSettings.BUS_EFFECTS)
+	hit = _player(load("res://assets/audio/hit.wav"), -9.0, 4, GameSettings.BUS_EFFECTS)
+	hurt = _player(load("res://assets/audio/hurt.wav"), -4.0, 4, GameSettings.BUS_EFFECTS)
 
 
-func _player(stream: AudioStream, volume_db: float, polyphony: int) -> AudioStreamPlayer:
+func _player(stream: AudioStream, volume_db: float, polyphony: int, bus: StringName) -> AudioStreamPlayer:
 	var player: AudioStreamPlayer = AudioStreamPlayer.new()
+	player.bus = bus
 	player.stream = stream
 	player.volume_db = volume_db
 	player.max_polyphony = polyphony

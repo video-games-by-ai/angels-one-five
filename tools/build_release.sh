@@ -8,6 +8,7 @@ GODOT="${AIRFLIGHT_GODOT:-$HOME/.cache/airfight/godot-4.5.1/Godot_v4.5.1-stable_
 cd "$ROOT"
 "$GODOT" --headless --path game --editor --import --quit >/dev/null 2>&1
 "$GODOT" --headless --path game --script res://tests/test_flight.gd
+"$GODOT" --headless --path game --script res://tests/test_net.gd
 mkdir -p build/airflight-linux build/airflight-windows
 "$GODOT" --headless --path game --export-release "Linux"
 "$GODOT" --headless --path game --export-release "Windows"
@@ -25,6 +26,10 @@ W/S throttle. A/D roll. M on the aircraft screen changes the map (Alpine
 Valley or Plav & Gusinje). Esc opens the pause menu with Change aircraft,
 sensitivity, invert, camera shake, volume, graphics quality (Low/Medium/High)
 and fullscreen. F11 toggles fullscreen.
+
+Online: one player presses Host match, opens UDP port 24555 on their router
+(or ticks "Open port automatically"), and sends the invite. Friends press
+Join match and paste it. The invite works like a password: share it privately.
 EOF
 rm -f build/airflight-windows.zip
 (cd build && python3 -c "import shutil; shutil.make_archive('airflight-windows', 'zip', '.', 'airflight-windows')")

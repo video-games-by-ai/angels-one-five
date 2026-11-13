@@ -1,9 +1,10 @@
 class_name Hud
 extends Control
 ## In-flight interface: steering circle and gun cross near the action, markers
-## and a lead pip on opponents, status strip at the bottom, score bar at the top,
-## see-through airframe damage panel on the middle right. Everything is drawn in
-## _draw so it stays crisp at any resolution.
+## and a lead pip on opponents, five health dots on the aircraft in front of the
+## guns, a radar map in the top left, status strip at the bottom, score bar at
+## the top, see-through airframe damage panel on the middle right. Everything is
+## drawn in _draw so it stays crisp at any resolution.
 
 const TEXT: Color = Color("fbf4e6")
 const DIM: Color = Color("e6d8bf")
@@ -15,7 +16,14 @@ const ZONE_OK: Color = Color(1, 1, 1, 0.14)
 const ZONE_DAMAGED: Color = Color("f5b942")
 const ZONE_CRITICAL: Color = Color("ff5a3c")
 const HOSTILE: Color = Color("ff7a4d")
+const FRIEND: Color = Color("fbf4e6")
+const DOT_RED: Color = Color("ff5a4a")
 const LEAD_RANGE: float = 1000.0
+const HEALTH_DOTS: int = 5
+const DOTS_FADE_IN: float = 0.15      ## seconds for the health dots to appear
+const DOTS_LINGER: float = 2.0        ## seconds they stay after the guns move off or a hit lands
+const DOTS_FADE_OUT: float = 0.35
+const RADAR_SIZE: float = 210.0       ## px across at 1080p
 
 var font: Font
 var font_bold: Font
@@ -40,6 +48,10 @@ var hint_time: float = 14.0
 var crash_time: float = 0.0
 var zone_polygons: Array[PackedVector2Array] = []
 var ui_scale: float = 1.0
+var frame_delta: float = 0.0
+var dots_shown: Dictionary = {}       ## combatant id -> health-dot opacity 0..1
+var dots_hold: Dictionary = {}        ## combatant id -> seconds the dots stay up
+var radar: Radar
 
 
 func _ready() -> void:
@@ -64,6 +76,30 @@ func attach(pilot: Combatant, enemies: Array[Combatant]) -> void:
 	hit_marker = 0.0
 	damage_flash = 0.0
 	message_time = 0.0
+	dots_shown.clear()
+	dots_hold.clear()
+	if radar == null and terrain != null:
+		radar = Radar.new()
+		radar.hud = self
+		add_child(radar)
+		radar.setup(terrain)
+
+
+## One of our rounds struck `target`: keep its health dots up for a while.
+func target_hit(target: Combatant) -> void:
+	dots_hold[target.id] = DOTS_LINGER
+	dots_shown[target.id] = maxf(float(dots_shown.get(target.id, 0.0)), 0.6)
+
+
+func is_friend(other: Combatant) -> bool:
+	return player != null and other.team == player.team
+
+
+## Health dots for a hull share: one per fifth of the hull, at least one while flying.
+static func health_dots(hull_share: float) -> int:
+	if hull_share <= 0.0:
+		return 0
+	return clampi(ceili(hull_share * HEALTH_DOTS - 0.001), 1, HEALTH_DOTS)
 
 
 func announce(text: String) -> void:
@@ -78,6 +114,12 @@ func _process(delta: float) -> void:
 	damage_flash = maxf(damage_flash - delta * 1.8, 0.0)
 	message_time = maxf(message_time - delta, 0.0)
 	ui_scale = clampf(size.y / 1080.0, 0.7, 2.0)
+	frame_delta = delta
+	if radar != null:
+		radar.visible = model != null
+		radar.position = Vector2(26.0, 34.0) * ui_scale
+		radar.size = Vector2.ONE * RADAR_SIZE * ui_scale
+		radar.queue_redraw()
 	queue_redraw()
 
 
@@ -156,47 +198,109 @@ func _draw_damage_flash() -> void:
 	draw_polygon([Vector2(size.x, 0), Vector2(size.x, size.y), Vector2(size.x - edge, size.y), Vector2(size.x - edge, 0)], [tint, tint, clear, clear])
 
 
-## Brackets, range and a lead pip on each opponent; an edge arrow when off screen.
+## Brackets, range and a lead pip on each opponent; an edge arrow when off
+## screen; health dots on the one the guns point at. Friends are drawn in white
+## and get no lead pip.
 func _draw_targets(s: float) -> void:
 	if not model.alive:
 		return
+	var gun_cross: Variant = _project(model.position + model.forward() * 650.0)
+	var aim_point: Variant = _project(model.position + input.aim_direction * 1200.0)
+	# Only the aircraft nearest the sights counts as aimed at, so targets that
+	# overlap far away do not all show their dots.
+	var best: Combatant = null
+	var best_score: float = INF
 	for enemy in opponents:
-		if not enemy.model.alive:
-			continue
-		var where: Vector3 = enemy.model.position
-		if enemy.aircraft != null:
-			where = enemy.aircraft.get_global_transform_interpolated().origin
-		var dist: float = where.distance_to(model.position)
-		var screen: Variant = _project(where)
-		var margin: float = 46.0 * s
-		var inside: Rect2 = Rect2(Vector2(margin, margin), size - Vector2(margin, margin) * 2.0)
-		if screen == null or not inside.has_point(screen):
-			_draw_edge_arrow(where, dist, s)
-			continue
-		var c: Vector2 = screen
-		var half: float = clampf(9.0 * size.y / maxf(dist, 1.0), 13.0 * s, 60.0 * s)
-		var arm: float = half * 0.42
-		for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
-			var p: Vector2 = c + corner * half
-			draw_line(p, p - Vector2(corner.x * arm, 0), HOSTILE, 1.8 * s)
-			draw_line(p, p - Vector2(0, corner.y * arm), HOSTILE, 1.8 * s)
-		_text(Vector2(c.x - 100 * s, c.y - half - 8 * s), "%s  %d m" % [String(enemy.model.spec.short), int(dist)], 12 * s, HOSTILE, true, HORIZONTAL_ALIGNMENT_CENTER, 200 * s)
-		var bar: Rect2 = Rect2(c + Vector2(-half, half + 5 * s), Vector2(half * 2.0, 3.5 * s))
-		draw_rect(bar, Color(0, 0, 0, 0.45), true)
-		draw_rect(Rect2(bar.position, Vector2(bar.size.x * enemy.model.hull_ratio(), bar.size.y)), HOSTILE, true)
-		if dist < LEAD_RANGE:
-			# Where to put the gun cross so the rounds and the target meet.
-			var flight_time: float = dist / BulletField.SPEED
-			var lead: Variant = _project(where + (enemy.model.velocity() - model.velocity()) * flight_time)
-			if lead != null:
-				var l: Vector2 = lead
-				draw_line(c, l, Color(HOSTILE, 0.35), 1.0 * s)
-				draw_arc(l, 7.0 * s, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 3.6 * s)
-				draw_arc(l, 7.0 * s, 0.0, TAU, 20, HOSTILE, 1.8 * s)
-				draw_circle(l, 1.8 * s, HOSTILE)
+		if enemy.model.alive and not enemy.left:
+			var score: float = _draw_target(enemy, s, gun_cross, aim_point)
+			if score < best_score:
+				best_score = score
+				best = enemy
+	for enemy in opponents:
+		_update_dots(enemy, enemy == best)
 
 
-func _draw_edge_arrow(where: Vector3, dist: float, s: float) -> void:
+## Draws one opponent's marker. Returns how close the sights are to it, as a
+## share of its catch radius (below 1 = aimed at), or INF when they are off it.
+func _draw_target(enemy: Combatant, s: float, gun_cross: Variant, aim_point: Variant) -> float:
+	var friend: bool = is_friend(enemy)
+	var colour: Color = FRIEND if friend else HOSTILE
+	var where: Vector3 = enemy.model.position
+	if enemy.aircraft != null:
+		where = enemy.aircraft.get_global_transform_interpolated().origin
+	var dist: float = where.distance_to(model.position)
+	var screen: Variant = _project(where)
+	var margin: float = 46.0 * s
+	var inside: Rect2 = Rect2(Vector2(margin, margin), size - Vector2(margin, margin) * 2.0)
+	if screen == null or not inside.has_point(screen):
+		_draw_edge_arrow(where, dist, s, colour)
+		return INF
+	var c: Vector2 = screen
+	var half: float = clampf(9.0 * size.y / maxf(dist, 1.0), 13.0 * s, 60.0 * s)
+	var arm: float = half * 0.42
+	for corner: Vector2 in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]:
+		var p: Vector2 = c + corner * half
+		draw_line(p, p - Vector2(corner.x * arm, 0), colour, 1.8 * s)
+		draw_line(p, p - Vector2(0, corner.y * arm), colour, 1.8 * s)
+	var tag: String = String(enemy.model.spec.short) if enemy.pilot_name == "" else "%s · %s" % [enemy.pilot_name.to_upper(), String(enemy.model.spec.short)]
+	_text(Vector2(c.x - 140 * s, c.y - half - 8 * s), "%s  %d m" % [tag, int(dist)], 12 * s, colour, true, HORIZONTAL_ALIGNMENT_CENTER, 280 * s)
+	var reach: float = maxf(half * 1.25, 28.0 * s)
+	var aimed: float = INF
+	for point: Variant in [gun_cross, aim_point]:
+		if point != null and (point as Vector2).distance_to(c) < reach:
+			aimed = minf(aimed, (point as Vector2).distance_to(c) / reach)
+	if dist < LEAD_RANGE and not friend:
+		# Where to put the gun cross so the rounds and the target meet.
+		var flight_time: float = dist / BulletField.SPEED
+		var lead: Variant = _project(where + (enemy.model.velocity() - model.velocity()) * flight_time)
+		if lead != null:
+			var l: Vector2 = lead
+			draw_line(c, l, Color(HOSTILE, 0.35), 1.0 * s)
+			draw_arc(l, 7.0 * s, 0.0, TAU, 20, Color(0, 0, 0, 0.4), 3.6 * s)
+			draw_arc(l, 7.0 * s, 0.0, TAU, 20, HOSTILE, 1.8 * s)
+			draw_circle(l, 1.8 * s, HOSTILE)
+			for point: Variant in [gun_cross, aim_point]:
+				if point != null and (point as Vector2).distance_to(l) < 24.0 * s:
+					aimed = minf(aimed, (point as Vector2).distance_to(l) / (24.0 * s))
+	var shown: float = float(dots_shown.get(enemy.id, 0.0))
+	if shown > 0.0:
+		_draw_health_dots(Vector2(c.x, c.y + half + 11.0 * s), health_dots(enemy.model.hull_ratio()), DOT_RED if not friend else FRIEND, shown, s)
+	return aimed
+
+
+## Fade the health dots in while the guns are on an aircraft; keep them a while after.
+func _update_dots(enemy: Combatant, aimed: bool) -> void:
+	var hold: float = float(dots_hold.get(enemy.id, 0.0))
+	var shown: float = float(dots_shown.get(enemy.id, 0.0))
+	if aimed:
+		hold = DOTS_LINGER
+	else:
+		hold = maxf(hold - frame_delta, 0.0)
+	if not enemy.model.alive or enemy.left:
+		hold = 0.0
+		shown = 0.0
+	elif hold > 0.0:
+		shown = minf(shown + frame_delta / DOTS_FADE_IN, 1.0)
+	else:
+		shown = maxf(shown - frame_delta / DOTS_FADE_OUT, 0.0)
+	dots_hold[enemy.id] = hold
+	dots_shown[enemy.id] = shown
+
+
+func _draw_health_dots(centre: Vector2, filled: int, colour: Color, alpha: float, s: float) -> void:
+	var r: float = 4.0 * s
+	var gap: float = 13.0 * s
+	for i in range(HEALTH_DOTS):
+		var p: Vector2 = centre + Vector2((i - (HEALTH_DOTS - 1) * 0.5) * gap, 0.0)
+		if i < filled:
+			draw_circle(p, r + 1.3 * s, Color(0, 0, 0, 0.3 * alpha))
+			draw_circle(p, r, Color(colour, 0.92 * alpha))
+		else:
+			draw_circle(p, r - 0.7 * s, Color(0, 0, 0, 0.25 * alpha))
+			draw_arc(p, r - 0.7 * s, 0.0, TAU, 16, Color(colour, 0.8 * alpha), 1.4 * s, true)
+
+
+func _draw_edge_arrow(where: Vector3, dist: float, s: float, colour: Color = HOSTILE) -> void:
 	var local: Vector3 = camera.global_transform.affine_inverse() * where
 	var dir: Vector2 = Vector2(local.x, -local.y)
 	if dir.length_squared() < 0.0001:
@@ -206,8 +310,8 @@ func _draw_edge_arrow(where: Vector3, dist: float, s: float) -> void:
 	var reach: float = minf(half.x / maxf(absf(dir.x), 0.001), half.y / maxf(absf(dir.y), 0.001))
 	var tip: Vector2 = size * 0.5 + dir * reach
 	var side: Vector2 = dir.orthogonal()
-	draw_colored_polygon([tip + dir * 13.0 * s, tip - dir * 9.0 * s + side * 10.0 * s, tip - dir * 9.0 * s - side * 10.0 * s], HOSTILE)
-	_text(tip - dir * 30.0 * s + Vector2(-50 * s, 5 * s), "%d m" % int(dist), 12 * s, HOSTILE, true, HORIZONTAL_ALIGNMENT_CENTER, 100 * s)
+	draw_colored_polygon([tip + dir * 13.0 * s, tip - dir * 9.0 * s + side * 10.0 * s, tip - dir * 9.0 * s - side * 10.0 * s], colour)
+	_text(tip - dir * 30.0 * s + Vector2(-50 * s, 5 * s), "%d m" % int(dist), 12 * s, colour, true, HORIZONTAL_ALIGNMENT_CENTER, 100 * s)
 
 
 func _draw_top(s: float) -> void:

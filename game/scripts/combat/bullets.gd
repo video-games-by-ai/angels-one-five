@@ -17,6 +17,7 @@ var ages: PackedFloat32Array = PackedFloat32Array()
 var damages: PackedFloat32Array = PackedFloat32Array()
 var shooters: PackedInt32Array = PackedInt32Array()
 var teams: PackedInt32Array = PackedInt32Array()
+var cosmetic: PackedByteArray = PackedByteArray()   ## 1 = drawn only: another machine decides its hits
 var multimesh: MultiMesh
 var holder: MultiMeshInstance3D
 
@@ -46,10 +47,11 @@ func clear() -> void:
 	damages.clear()
 	shooters.clear()
 	teams.clear()
+	cosmetic.clear()
 
 
 ## Launch one round. `carrier_velocity` is the shooting aircraft's velocity.
-func fire(shooter: int, team: int, origin: Vector3, direction: Vector3, carrier_velocity: Vector3, damage: float) -> void:
+func fire(shooter: int, team: int, origin: Vector3, direction: Vector3, carrier_velocity: Vector3, damage: float, only_drawn: bool = false) -> void:
 	if positions.size() >= MAX_BULLETS:
 		return
 	positions.append(origin)
@@ -58,6 +60,7 @@ func fire(shooter: int, team: int, origin: Vector3, direction: Vector3, carrier_
 	damages.append(damage)
 	shooters.append(shooter)
 	teams.append(team)
+	cosmetic.append(1 if only_drawn else 0)
 
 
 ## Advance all rounds one fixed step. Returns impacts: aircraft hits carry
@@ -74,7 +77,9 @@ func step(dt: float, terrain: TerrainData, targets: Array[Combatant]) -> Array[D
 		ages[i] += dt
 		var spent: bool = ages[i] > LIFETIME
 		for target in targets:
-			if target.team == teams[i] or not target.model.alive:
+			if cosmetic[i] == 1:
+				break
+			if target.team == teams[i] or not target.model.alive or target.left:
 				continue
 			# Flattened sphere around the aircraft, tested in its own space.
 			var inverse: Basis = target.model.basis().inverse()
@@ -109,12 +114,14 @@ func _remove(i: int) -> void:
 	damages[i] = damages[last]
 	shooters[i] = shooters[last]
 	teams[i] = teams[last]
+	cosmetic[i] = cosmetic[last]
 	positions.resize(last)
 	velocities.resize(last)
 	ages.resize(last)
 	damages.resize(last)
 	shooters.resize(last)
 	teams.resize(last)
+	cosmetic.resize(last)
 
 
 func _process(_delta: float) -> void:

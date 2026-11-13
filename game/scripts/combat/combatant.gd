@@ -19,6 +19,13 @@ var gun_index: int = 0
 var kills: int = 0
 var losses: int = 0
 var hit_flash: float = 0.0
+# Online play
+var peer_id: int = 0              ## network peer that flies this aircraft (1 = the host)
+var pilot_name: String = ""
+var remote: bool = false          ## flown on another machine; shown from its reports
+var buffer: SnapshotBuffer        ## smoothing for a remote aircraft
+var life: int = 0                 ## counts respawns, so late reports from a previous life are ignored
+var left: bool = false            ## the player left mid-match
 
 
 func setup(new_id: int, new_team: int, airframe: int, player: bool) -> void:
@@ -42,10 +49,11 @@ func spawn(at: Vector3, heading: float) -> void:
 
 
 ## Fire whatever rounds are due this step into the bullet field. Returns how many.
-func shoot(trigger: bool, dt: float, bullets: BulletField, damage_scale: float = 1.0) -> int:
+## `cosmetic` rounds are drawn but hit nothing (another machine decides those hits).
+func shoot(trigger: bool, dt: float, bullets: BulletField, damage_scale: float = 1.0, cosmetic: bool = false) -> int:
 	var rounds: int = model.rounds_this_step(trigger, dt)
 	for r in range(rounds):
 		var gun: Array[Vector3] = model.muzzle(gun_index)
 		gun_index += 1
-		bullets.fire(id, team, gun[0], gun[1], model.velocity(), float(model.spec.gun_damage) * damage_scale)
+		bullets.fire(id, team, gun[0], gun[1], model.velocity(), float(model.spec.gun_damage) * damage_scale, cosmetic)
 	return rounds

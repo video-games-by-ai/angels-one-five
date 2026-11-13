@@ -1,8 +1,12 @@
 # Multiplayer design: one host-opened UDP port
 
-**Status:** design only, nothing built yet. The transport and security parts were
-checked against Godot 4.5.1 with a loopback prototype on 2026-11-12 (results in
-[Prototype evidence](#prototype-evidence)). The gameplay netcode is untested.
+**Status:** built (2026-11-12). Connection, security, lobby, gameplay netcode,
+port help and the dedicated server are in `game/scripts/net/` and
+`game/scripts/ui/lobby.gd`. They are tested headless and in two-process matches
+over loopback (see [Test evidence](#test-evidence)). Still unproven: a match
+between two homes over the internet, Windows against Linux, and UPnP on a real
+router. [How it was built](#how-it-was-built) lists where the code differs from
+the plan below.
 
 ## Verdict
 
@@ -249,21 +253,76 @@ Every `hit_claim`: shooter and target alive and on different teams, the shooter'
 rate of fire allows, zone a valid value. Damage per round comes from the host's
 own `Airframes` table, never from the packet.
 
-### Code changes
+### Code
 
-- New `game/scripts/net/`: `invite.gd` (encode and decode), `net_session.gd`
-  (host, join, DTLS, authentication, lobby, packet decoder), `port_mapper.gd`
-  (UPnP on a thread), `snapshot_buffer.gd` (remote aircraft smoothing).
-- `combatant.gd`: add the owning peer id.
-- `main.gd`: `_command_for` handles only locally flown aircraft. `_on_impact`
-  splits into "report a hit" (client) and "apply damage" (host, and single
-  player). Respawn timers run on the host.
-- `bullets.gd`: a cosmetic flag per round.
-- `hangar.gd`: Host Match and Join Match entries, as the roadmap already plans.
-- Command-line flags `--host` and `--join=<invite>` so two copies can be tested on
-  one machine with `--autopilot`.
+- `game/scripts/net/invite.gd`: invite encoding and the strict decoder.
+- `game/scripts/net/net_protocol.gd`: every message, its encoder and its checked
+  decoder. It is the only code that reads bytes from another machine.
+- `game/scripts/net/net_session.gd`: hosting, joining, DTLS, the secret check,
+  attempt counting and blocking, the lobby roster, and message delivery.
+- `game/scripts/net/match_referee.gd`: the host's rules. It checks reports and
+  decides damage, kills, respawns and the winner, and it never touches rendering.
+- `game/scripts/net/snapshot_buffer.gd`: smoothing for remote aircraft.
+- `game/scripts/net/port_mapper.gd` (UPnP on a thread) and `address_probe.gd`
+  (Detect my address).
+- `game/scripts/ui/lobby.gd`: the Host and Join screens.
+- `main.gd`: the online match loop, next to the unchanged offline loop.
+  `combatant.gd` gains owner, name, life and left fields; `bullets.gd` gains
+  cosmetic rounds; `hangar.gd` gains Host match and Join match.
 
-Single player keeps working through the same paths with no network session.
+Single player is unchanged: it runs the old loop whenever no match is online.
+
+## How it was built
+
+These choices were made while building and differ from, or add to, the plan
+above.
+
+- **Free-for-all, up to 4 players.** Every player is on their own team, so 1v1
+  is the two-player case. Teams for 2v2 would only change who gets which team
+  number in the match start message.
+- **No AI aircraft online.** Online matches are players only. The referee and
+  messages would carry host-flown AI unchanged; it was left out to keep the first
+  version small.
+- **The host's map is used.** A joiner whose map differs reloads the scene for
+  it. The session lives under the scene root, so the connection survives the
+  reload, and messages that arrive during it are held until the game listens
+  again.
+- **Joining mid-match.** A joiner can enter the lobby during a match and flies
+  in the next one.
+- **Matches.** First to 5 kills by default (`score_limit` in `settings.cfg`, or
+  `--score-limit`). Each life has a number, so late reports and hits from a
+  previous life are ignored. After the result everyone returns to the lobby.
+  Pressing Start match again is the rematch. If only one player is left, the
+  match ends.
+- **Esc online** opens the settings without pausing the world, because the
+  others keep flying. Its middle button ends the match (host) or leaves it.
+- **Each invite is one host session.** A new key, certificate and secret are
+  made whenever hosting starts. New invite replaces only the secret.
+- **A player is removed for repeated impossible reports.** Each bad motion
+  report or hit claim adds a strike. Strikes decay at 2 per second, and passing
+  40 removes the player with a message. Races, such as hitting someone who just
+  died, are ignored without a strike.
+- **Spawns** are about 2 km apart along the valley, facing each other. Respawns
+  are about 2.2 km from the nearest opponent, facing them.
+- **Engine quirks found while building.** `SceneMultiplayer` will not poll until
+  it has a root path, so the session points it at an empty node of its own.
+  `SceneMultiplayer.disconnect_peer` does not emit `peer_disconnected`, so the
+  session does that bookkeeping itself. NUL bytes in received text make the
+  engine log errors, so the decoder refuses them.
+
+### Command line
+
+| Option | Meaning |
+|---|---|
+| `--host` | Host at once (with `--aircraft`, `--name`, `--port`, `--address`) |
+| `--join=INVITE` | Join at once |
+| `--server` | Dedicated server with no local pilot. Use with `--headless` and `--address` |
+| `--address=HOST` | The address or DNS name written into the invite |
+| `--port=N` | UDP port, default 24555 |
+| `--score-limit=N` | Kills that win |
+| `--autostart=N` | Host: start once N players are in (server default 2) |
+| `--invite-out=PATH` | Host: write the invite to a file whenever it changes |
+| `--quit-after-matches=N` | Quit after N matches (tests) |
 
 ## Security summary
 
@@ -307,9 +366,17 @@ Requirements, each with an automated test in `game/tests/test_net.gd`:
 ## When nobody can open a port
 
 Run the same game without graphics on a small rented server (about €4 to €5 per
-month): `airflight --headless --server`. It makes an invite and prints it. Every
-player connects out to it, so nobody opens a port and nobody's home address is
-shared.
+month):
+
+```bash
+./Airflight.x86_64 --headless -- --server --address=SERVER_PUBLIC_IP
+```
+
+It prints `INVITE AF1.…` (and writes it to `--invite-out` if given). It starts a
+match as soon as two players are in and starts a new one six seconds after each
+result. Every player connects out to it, so nobody opens a port and nobody's home
+address is shared. The server skips trees and clouds. It still loads the map,
+because flight collision needs the terrain.
 
 This is better than a packet relay because it is the same host code with no local
 player, rather than a second program with its own protocol. Under this design the
@@ -317,9 +384,8 @@ host only checks packets, forwards state and keeps score, so the server needs ve
 little power. It costs some extra delay, usually 10 to 30 ms when the server is
 nearby.
 
-Build it only if a real group turns out to have no one who can host. The only
-thing to preserve until then is that host logic never depends on rendering, which
-the current headless tests already require.
+It was cheap to build, because the host logic never depended on rendering. It
+is the same code as a player's host with no local pilot.
 
 ## Build order
 
@@ -334,9 +400,10 @@ the current headless tests already require.
    (roadmap milestone 5).
 6. **Dedicated server:** only if needed.
 
-Step 1 is small and independent of the gameplay netcode. Steps 2 and 3 carry most
-of the effort and the risk, because how the game feels at real latency cannot be
-judged until step 5.
+Steps 1 to 4 and 6 are built. Delay and loss were tested on the smoothing code
+with simulated loss and jitter, not on a real link. Step 5 needs two machines in
+different homes and a Windows build, and is still to do. Until then, how the game
+feels at real latency is unknown.
 
 ## Prototype evidence
 
@@ -359,14 +426,89 @@ certificate.
 | Certificate size, full invite length | 796 bytes, 1,103 characters |
 | Methods on `PacketPeerDTLS` and `ENetPacketPeer` that return the remote certificate | None, which confirms correction 2 |
 
+## Test evidence
+
+All on Godot 4.5.1, Linux, 2026-11-12.
+
+**`game/tests/test_net.gd`** (headless, about 40 s; also run by
+`tools/build_release.sh`). Every check passes:
+
+- **Invites:** round trip (1,107 characters); DNS names; paste whitespace. It
+  refuses empty, foreign, truncated, oversized, stray-character, wrong-version,
+  bad-address, damaged-certificate and port-0 invites, each with a message.
+- **Messages:** every type round-trips. Every truncation and any extra byte is
+  refused. NaN, absurd speeds, non-unit rotations, bad zones, bad aircraft ids,
+  invalid UTF-8 and NUL are refused. Names are cleaned. 4,000 random and damaged
+  packets cause no crash. A motion report is 55 bytes.
+- **Smoothing:** a straight path is drawn within 1.3 m of the truth, 100 ms
+  behind. A turning path with 30 % of reports lost and up to 50 ms of jitter
+  stays within centimetres, with no jumps. Without reports it extrapolates for
+  at most 250 ms. Late reports are ignored.
+- **Referee:** it refuses teleports, impossible speeds, positions off the map,
+  clocks running ahead, hits without a trigger, hits out of range, self-hits,
+  hits on a previous life and claims beyond the rate of fire. Damage uses the
+  host's figures. A respawn comes after 3 s with a new life. Kills and losses
+  count. The score limit ends the match, and no damage counts after it. Crashes
+  count once. A match left with one player ends. Repeated bad reports mark the
+  player for removal.
+- **Live loopback connections:** these exercise the security requirements
+  above. The right invite reaches the lobby with name and aircraft, and messages
+  flow both ways. A joiner's host-only messages are dropped. Kick removes the
+  joiner with a reason. After New invite, the old invite fails. After hosting
+  stops, the port is free. A wrong certificate fails in the handshake, before
+  the secret is sent. A wrong secret, or none before the timeout, is dropped,
+  never connected, and counted. Five failures block the address, even with the
+  right invite, until the block expires. An unencrypted client cannot connect.
+  Junk packets never reach the game, and the sender is disconnected. A different
+  version is refused with a clear message. No script contains remote calls, and
+  object decoding is off.
+
+**`tools/net_smoke.sh`**: whole matches between separate headless game
+processes over loopback, all pilots flown by the AI, first to 2 kills.
+
+- Host and joiner. The joiner started on the other map and reloaded to the
+  host's, keeping its connection. The match started on its own and the pilots
+  found each other. Hits, hull values, kills and losses matched in both
+  processes all the way through. The host won 2-1 after about 3 minutes, both
+  processes showed the same result, and both quit.
+- Dedicated server and two joiners: the same, with the server flying no
+  aircraft and relaying the two players.
+
+**Lobby screens:** rendered off-screen with live sessions by
+`game/tests/render_lobby.gd` and checked by eye: the host screen with the
+checklist, invite and player list with Kick, the join screen, and the joined
+lobby.
+
+![The host's lobby](screenshots/online-lobby-host.png)
+
+**In flight:** a windowed joiner against a headless host, both flown by the AI.
+The joiner sees the host's Thunderbolt in the target bracket under the host's
+name, and the damage the host decided on its own airframe panel.
+
+![An online match from the joiner's side](screenshots/online-match.png)
+
+Not tested:
+
+- **UPnP on a real router.** Doing so would change the router's settings. The
+  code follows Godot's API, and a refusal or no router falls back to manual
+  forwarding with a message.
+- **Detect my address.** Running it would send this machine's address to an
+  outside service.
+- **Two homes over the internet, and Windows against Linux.**
+- **Playing it by hand with mouse and keyboard.** Every match above was flown
+  by the AI.
+
 ## Open points
 
 - Godot 4.5.1 prints `Parameter "p_mutex->mutex" is null` three times whenever a
-  DTLS connection closes. Connections made afterwards worked normally, so it
-  looks like log noise, but it should be rechecked inside the real game and
-  against newer Godot versions.
+  DTLS connection closes. It does so in the real game too, and connections made
+  afterwards work normally, so it is log noise from the engine. Recheck with
+  newer Godot versions.
+- Godot prints one "Unicode parsing error … NUL character" each time it
+  generates the host's key and certificate. This also comes from the engine and
+  does no harm.
 - `TLSOptions.client_unsafe()` worked in one prototype run and failed to start in
   another. The cause was not investigated because the design never uses it.
 - UPnP was not exercised, since doing so would change real router settings.
-- Latency, packet loss and the feel of shooter-decided hits are untested until
-  two machines fly against each other.
+- How shooter-decided hits feel at real latency is untested until two machines
+  in different homes fly against each other.

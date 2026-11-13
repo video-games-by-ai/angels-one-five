@@ -90,7 +90,10 @@ func _rebuild(head: Vector3, head_strength: float) -> void:
 		var side: Vector3 = dir.cross(eye - p).normalized() * WIDTH
 		var age: float = 0.0 if i == count else ages[i]
 		var strength: float = head_strength if i == count else strengths[i]
-		var alpha: float = strength * (1.0 - age / LIFETIME) * 0.3
+		# Fade near the camera, like DamageTrail, so the player's own ribbons do not
+		# sweep past the chase camera as broad bands.
+		var alpha: float = strength * (1.0 - age / LIFETIME) * 0.3 \
+			* smoothstep(DamageTrail.NEAR_FADE_FROM, DamageTrail.NEAR_FADE_TO, eye.distance_to(p))
 		var color: Color = Color(1, 1, 1, clampf(alpha, 0.0, 1.0))
 		immediate.surface_set_color(color)
 		immediate.surface_add_vertex(p - side)

@@ -1,0 +1,198 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 900" width="1600" height="900" font-family="Montserrat, 'DejaVu Sans', Arial, sans-serif">
+<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#3f5f8c"/>
+    <stop offset="0.5" stop-color="#8f9db3"/>
+    <stop offset="0.8" stop-color="#e9c392"/>
+    <stop offset="1" stop-color="#f3d7a6"/>
+  </linearGradient>
+  <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#f3d7a6" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#f3d7a6" stop-opacity="0"/>
+  </linearGradient>
+  <g id="plane-side">
+    <path d="M45,0 C40,-7 20,-9 5,-9 L-4,-14 L-14,-14 L-18,-8 L-38,-5 L-48,-21 L-55,-21 L-51,-3 L-51,3 L-38,5 C-10,9 25,9 45,0 Z" fill="#59605f" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-4,-13 L-13,-13 L-16,-9 L3,-9 Z" fill="#b9d3df" opacity="0.8"/>
+    <ellipse cx="2" cy="3" rx="19" ry="3.2" fill="#3c4241"/>
+    <line x1="46" y1="-17" x2="46" y2="17" stroke="#2c302f" stroke-width="1.5" opacity="0.6"/>
+    <circle cx="-22" cy="-1" r="4" fill="#f2b33d"/>
+  </g>
+  <g id="plane-rear">
+    <circle cx="0" cy="0" r="30" fill="none" stroke="#fbf4e6" stroke-width="1" opacity="0.25"/>
+    <path d="M-92,3 Q-40,-5 0,-3 Q40,-5 92,3 L92,7 Q40,5 0,9 Q-40,5 -92,7 Z" fill="#aab0b3" stroke="#2c302f" stroke-width="1"/>
+    <ellipse cx="0" cy="0" rx="12" ry="14" fill="#c5cacc" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-2,-12 L0,-40 L2,-12 Z" fill="#f2b33d" stroke="#2c302f" stroke-width="1"/>
+    <path d="M-34,-6 L34,-6 L34,-3 L-34,-3 Z" fill="#aab0b3" stroke="#2c302f" stroke-width="1"/>
+    <ellipse cx="0" cy="-9" rx="6" ry="5" fill="#b9d3df" opacity="0.8"/>
+  </g>
+  <radialGradient id="wedge122132" gradientUnits="userSpaceOnUse" cx="122" cy="132" r="92">
+    <stop offset="0" stop-color="#fbf4e6" stop-opacity="0.30"/>
+    <stop offset="1" stop-color="#fbf4e6" stop-opacity="0.04"/>
+  </radialGradient>
+  <linearGradient id="trailGrey" gradientUnits="userSpaceOnUse" x1="985" y1="382" x2="560" y2="300">
+    <stop offset="0" stop-color="#8a8a8a" stop-opacity="0.75"/>
+    <stop offset="1" stop-color="#9a9a9a" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="trailLight" gradientUnits="userSpaceOnUse" x1="470" y1="300" x2="770" y2="215">
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0.50"/>
+    <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="trailOwn" gradientUnits="userSpaceOnUse" x1="800" y1="640" x2="735" y2="830">
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+    <stop offset="0.3" stop-color="#ffffff" stop-opacity="0.30"/>
+    <stop offset="1" stop-color="#ffffff" stop-opacity="0.05"/>
+  </linearGradient>
+</defs>
+
+<rect width="1600" height="900" fill="url(#sky)"/>
+<polygon points="0,450 112,360 208,423 352,270 480,387 608,306 752,432 896,342 1024,234 1152,378 1280,297 1440,414 1600,324 1600,585 0,585" fill="#7d8aa6"/>
+<polygon points="0,450 112,360 208,423 352,270 480,387 608,306 752,432 896,342 1024,234 1152,378 1280,297 1440,414 1600,324 1600,585 0,585" fill="#ffffff" opacity="0.10"/>
+<rect x="0" y="432" width="1600" height="180" fill="url(#haze)"/>
+<polygon points="0,558 160,441 288,513 416,567 960,576 1184,504 1376,405 1504,486 1600,450 1600,900 0,900" fill="#3e4d45"/>
+<ellipse cx="704" cy="648" rx="272" ry="32" fill="#8fb4c4" opacity="0.75"/>
+<rect x="0" y="567" width="1600" height="360" fill="#1c241f" opacity="0.25"/>
+
+<path d="M985,382 C900,410 800,372 720,338 S600,300 560,300" fill="none" stroke="url(#trailGrey)" stroke-width="7" stroke-linecap="round"/>
+<path d="M470,300 C540,292 640,262 770,215" fill="none" stroke="url(#trailLight)" stroke-width="2.2" stroke-linecap="round"/>
+<path d="M800,640 C795,700 770,780 735,830" fill="none" stroke="url(#trailOwn)" stroke-width="4" stroke-linecap="round"/>
+<use xlink:href="#plane-side" transform="translate(462,301) scale(-0.20,0.20)"/>
+<path d="M453.9,287.0 L448.0,287.0 L448.0,292.9" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<path d="M470.1,287.0 L476.0,287.0 L476.0,292.9" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<path d="M470.1,315.0 L476.0,315.0 L476.0,309.1" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<path d="M453.9,315.0 L448.0,315.0 L448.0,309.1" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<text x="462" y="280" font-size="11" font-weight="600" fill="#ff5a4a" text-anchor="middle" opacity="1.0">SPITFIRE  2140 m</text>
+<use xlink:href="#plane-side" transform="translate(1000,380) rotate(-14) scale(0.52)"/>
+<path d="M980.3,346.0 L966.0,346.0 L966.0,360.3" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<path d="M1019.7,346.0 L1034.0,346.0 L1034.0,360.3" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<path d="M1019.7,414.0 L1034.0,414.0 L1034.0,399.7" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<path d="M980.3,414.0 L966.0,414.0 L966.0,399.7" fill="none" stroke="#ff5a4a" stroke-width="1.8"/>
+<text x="986" y="337" font-size="12" font-weight="600" fill="#ff5a4a" text-anchor="middle" opacity="1.0">MUSTANG  640 m</text>
+<g opacity="0.9">
+<circle cx="972.0" cy="427.0" r="5.6" fill="#000" opacity="0.30"/>
+<circle cx="972.0" cy="427.0" r="4.2" fill="#ff5a4a"/>
+<circle cx="986.0" cy="427.0" r="5.6" fill="#000" opacity="0.30"/>
+<circle cx="986.0" cy="427.0" r="4.2" fill="#ff5a4a"/>
+<circle cx="1000.0" cy="427.0" r="5.6" fill="#000" opacity="0.30"/>
+<circle cx="1000.0" cy="427.0" r="4.2" fill="#ff5a4a"/>
+<circle cx="1014.0" cy="427.0" r="3.5" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+<circle cx="1028.0" cy="427.0" r="3.5" fill="rgba(0,0,0,0.28)" stroke="#ff5a4a" stroke-width="1.5" opacity="0.85"/>
+</g>
+<line x1="1000" y1="380" x2="1064" y2="362" stroke="#ff5a4a" stroke-width="1" opacity="0.35"/>
+<circle cx="1064" cy="362" r="7" fill="none" stroke="#000" stroke-opacity="0.4" stroke-width="3.6"/><circle cx="1064" cy="362" r="7" fill="none" stroke="#ff5a4a" stroke-width="1.8"/><circle cx="1064" cy="362" r="1.8" fill="#ff5a4a"/>
+<path d="M1086.6,328.5 A25.0,25.0 0 0 1 1101.5,343.4" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="4.0"/>
+<path d="M1086.6,328.5 A25.0,25.0 0 0 1 1101.5,343.4" fill="none" stroke="#ffc766" stroke-width="1.6"/>
+<path d="M1101.5,360.6 A25.0,25.0 0 0 1 1086.6,375.5" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="4.0"/>
+<path d="M1101.5,360.6 A25.0,25.0 0 0 1 1086.6,375.5" fill="none" stroke="#ffc766" stroke-width="1.6"/>
+<path d="M1069.4,375.5 A25.0,25.0 0 0 1 1054.5,360.6" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="4.0"/>
+<path d="M1069.4,375.5 A25.0,25.0 0 0 1 1054.5,360.6" fill="none" stroke="#ffc766" stroke-width="1.6"/>
+<path d="M1054.5,343.4 A25.0,25.0 0 0 1 1069.4,328.5" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="4.0"/>
+<path d="M1054.5,343.4 A25.0,25.0 0 0 1 1069.4,328.5" fill="none" stroke="#ffc766" stroke-width="1.6"/>
+<circle cx="1078" cy="352" r="2.4" fill="#ffc766"/>
+<path d="M1038.4,366 L1052.8,366 M1067.2,366 L1081.6,366 M1060,358.8 L1060,351.6" stroke="rgba(0,0,0,0.35)" stroke-width="4.0" fill="none"/>
+<path d="M1038.4,366 L1052.8,366 M1067.2,366 L1081.6,366 M1060,358.8 L1060,351.6" stroke="#fbf4e6" stroke-width="1.6" fill="none"/>
+<circle cx="1060" cy="366" r="2" fill="#fbf4e6"/>
+<use xlink:href="#plane-rear" transform="translate(800,628) rotate(-9)"/>
+<rect x="625" y="15" width="350" height="47" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="800" y="35" font-size="12.5" font-weight="600" fill="#e6d8bf" text-anchor="middle" opacity="1.0">PRACTICE DOGFIGHT</text>
+<text x="800" y="55" font-size="16" font-weight="600" fill="#fbf4e6" text-anchor="middle" opacity="1.0">02:14</text>
+<text x="640" y="55" font-size="13.5" font-weight="600" fill="#ffc766" text-anchor="start" opacity="1.0">KILLS 1</text>
+<text x="960" y="55" font-size="13.5" font-weight="600" fill="#e6d8bf" text-anchor="end" opacity="1.0">LOST 0</text>
+<rect x="358" y="838" width="884" height="42" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="378" y="866" font-size="11" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">HULL</text>
+<rect x="436" y="854" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="437" y="855" width="103" height="7" fill="#fbf4e6"/>
+<text x="569" y="864" font-size="14" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">84</text>
+<text x="603" y="866" font-size="11" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">BOOST</text>
+<rect x="661" y="854" width="125" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="662" y="855" width="74" height="7" fill="#ffc766"/>
+<text x="794" y="864" font-size="14" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">60</text>
+<text x="828" y="866" font-size="11" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">THR</text>
+<rect x="886" y="854" width="75" height="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+<rect x="887" y="855" width="58" height="7" fill="#e6d8bf"/>
+<text x="969" y="864" font-size="14" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">80</text>
+<text x="1003" y="866" font-size="16" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">548 km/h</text>
+<text x="1103" y="866" font-size="16" font-weight="600" fill="#fbf4e6" text-anchor="start" opacity="1.0">ALT 1312 m</text>
+<rect x="1388" y="321" width="192" height="208" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<text x="1400" y="341" font-size="11" font-weight="600" fill="#e6d8bf" text-anchor="start" opacity="1.0">AIRFRAME</text>
+<text x="1568" y="341" font-size="10" font-weight="400" fill="#e6d8bf" text-anchor="end" opacity="1.0">MUSTANG</text>
+<g transform="translate(1484,430)" fill="rgba(255,255,255,0.14)" stroke="rgba(255,245,222,0.85)" stroke-width="1.1"><path d="M-6,-62 L6,-62 L8,-20 L-8,-20 Z"/><path d="M-8,-20 L8,-20 L7,34 L-7,34 Z"/><path d="M-8,-18 L-76,-4 L-76,8 L-8,6 Z"/><path d="M8,-18 L76,-4 L76,8 L8,6 Z" fill="#f5b942" fill-opacity="0.85"/><path d="M-7,34 L7,34 L26,52 L26,60 L-26,60 L-26,52 Z"/></g>
+<g>
+<circle cx="122" cy="132" r="92" fill="rgba(14,12,9,0.30)"/>
+<clipPath id="rc122132"><circle cx="122" cy="132" r="92"/></clipPath>
+<g clip-path="url(#rc122132)">
+<path d="M53,164 q28,-20 57,-7 q23,11 9,24 q-37,18 -66,-17 Z" fill="#9fd0e6" opacity="0.22"/>
+<path d="M30,81 q32,-20 64,-5 t60,-9 t64,9" fill="none" stroke="#fbf4e6" stroke-width="4.2" stroke-linecap="round" opacity="0.16"/>
+<path d="M30,198 q32,-20 64,-5 t60,-9 t64,9" fill="none" stroke="#fbf4e6" stroke-width="4.2" stroke-linecap="round" opacity="0.13"/>
+<path d="M122.0,132.0 L44.6,82.3 A92.0,92.0 0 0 1 46.6,79.2 Z" fill="#ffc766" opacity="0.240"/>
+<path d="M122.0,132.0 L42.9,85.0 A92.0,92.0 0 0 1 44.8,81.9 Z" fill="#ffc766" opacity="0.229"/>
+<path d="M122.0,132.0 L41.3,87.8 A92.0,92.0 0 0 1 43.1,84.6 Z" fill="#ffc766" opacity="0.219"/>
+<path d="M122.0,132.0 L39.8,90.7 A92.0,92.0 0 0 1 41.5,87.4 Z" fill="#ffc766" opacity="0.209"/>
+<path d="M122.0,132.0 L38.4,93.6 A92.0,92.0 0 0 1 40.0,90.2 Z" fill="#ffc766" opacity="0.199"/>
+<path d="M122.0,132.0 L37.1,96.5 A92.0,92.0 0 0 1 38.6,93.1 Z" fill="#ffc766" opacity="0.189"/>
+<path d="M122.0,132.0 L35.9,99.5 A92.0,92.0 0 0 1 37.3,96.1 Z" fill="#ffc766" opacity="0.179"/>
+<path d="M122.0,132.0 L34.9,102.5 A92.0,92.0 0 0 1 36.1,99.0 Z" fill="#ffc766" opacity="0.170"/>
+<path d="M122.0,132.0 L33.9,105.6 A92.0,92.0 0 0 1 35.0,102.0 Z" fill="#ffc766" opacity="0.161"/>
+<path d="M122.0,132.0 L33.0,108.7 A92.0,92.0 0 0 1 34.0,105.1 Z" fill="#ffc766" opacity="0.151"/>
+<path d="M122.0,132.0 L32.3,111.8 A92.0,92.0 0 0 1 33.1,108.2 Z" fill="#ffc766" opacity="0.143"/>
+<path d="M122.0,132.0 L31.6,114.9 A92.0,92.0 0 0 1 32.4,111.3 Z" fill="#ffc766" opacity="0.134"/>
+<path d="M122.0,132.0 L31.1,118.1 A92.0,92.0 0 0 1 31.7,114.4 Z" fill="#ffc766" opacity="0.125"/>
+<path d="M122.0,132.0 L30.6,121.3 A92.0,92.0 0 0 1 31.1,117.6 Z" fill="#ffc766" opacity="0.117"/>
+<path d="M122.0,132.0 L30.3,124.5 A92.0,92.0 0 0 1 30.7,120.8 Z" fill="#ffc766" opacity="0.109"/>
+<path d="M122.0,132.0 L30.1,127.7 A92.0,92.0 0 0 1 30.4,124.0 Z" fill="#ffc766" opacity="0.101"/>
+<path d="M122.0,132.0 L30.0,130.9 A92.0,92.0 0 0 1 30.1,127.2 Z" fill="#ffc766" opacity="0.094"/>
+<path d="M122.0,132.0 L30.0,134.1 A92.0,92.0 0 0 1 30.0,130.4 Z" fill="#ffc766" opacity="0.086"/>
+<path d="M122.0,132.0 L30.2,137.3 A92.0,92.0 0 0 1 30.0,133.6 Z" fill="#ffc766" opacity="0.079"/>
+<path d="M122.0,132.0 L30.4,140.5 A92.0,92.0 0 0 1 30.1,136.8 Z" fill="#ffc766" opacity="0.072"/>
+<path d="M122.0,132.0 L30.7,143.7 A92.0,92.0 0 0 1 30.4,140.0 Z" fill="#ffc766" opacity="0.066"/>
+<path d="M122.0,132.0 L31.2,146.9 A92.0,92.0 0 0 1 30.7,143.2 Z" fill="#ffc766" opacity="0.059"/>
+<path d="M122.0,132.0 L31.8,150.0 A92.0,92.0 0 0 1 31.1,146.4 Z" fill="#ffc766" opacity="0.053"/>
+<path d="M122.0,132.0 L32.5,153.2 A92.0,92.0 0 0 1 31.7,149.6 Z" fill="#ffc766" opacity="0.047"/>
+<path d="M122.0,132.0 L33.3,156.3 A92.0,92.0 0 0 1 32.4,152.7 Z" fill="#ffc766" opacity="0.041"/>
+<path d="M122.0,132.0 L34.2,159.4 A92.0,92.0 0 0 1 33.1,155.8 Z" fill="#ffc766" opacity="0.036"/>
+<path d="M122.0,132.0 L35.2,162.4 A92.0,92.0 0 0 1 34.0,158.9 Z" fill="#ffc766" opacity="0.031"/>
+<path d="M122.0,132.0 L36.3,165.4 A92.0,92.0 0 0 1 35.0,162.0 Z" fill="#ffc766" opacity="0.026"/>
+<path d="M122.0,132.0 L37.5,168.4 A92.0,92.0 0 0 1 36.1,165.0 Z" fill="#ffc766" opacity="0.022"/>
+<path d="M122.0,132.0 L38.8,171.3 A92.0,92.0 0 0 1 37.3,167.9 Z" fill="#ffc766" opacity="0.017"/>
+<path d="M122.0,132.0 L40.2,174.2 A92.0,92.0 0 0 1 38.6,170.9 Z" fill="#ffc766" opacity="0.014"/>
+<path d="M122.0,132.0 L41.8,177.0 A92.0,92.0 0 0 1 40.0,173.8 Z" fill="#ffc766" opacity="0.010"/>
+<path d="M122.0,132.0 L43.4,179.8 A92.0,92.0 0 0 1 41.5,176.6 Z" fill="#ffc766" opacity="0.007"/>
+<path d="M122.0,132.0 L45.1,182.5 A92.0,92.0 0 0 1 43.1,179.4 Z" fill="#ffc766" opacity="0.005"/>
+<path d="M122.0,132.0 L46.9,185.2 A92.0,92.0 0 0 1 44.8,182.1 Z" fill="#ffc766" opacity="0.002"/>
+<path d="M122.0,132.0 L48.8,187.8 A92.0,92.0 0 0 1 46.6,184.8 Z" fill="#ffc766" opacity="0.001"/>
+<path d="M122.0,132.0 L102.9,42.0 A92.0,92.0 0 0 1 213.9,128.8 Z" fill="url(#wedge122132)"/>
+</g>
+<line x1="122" y1="132" x2="102.9" y2="42.0" stroke="#fbf4e6" stroke-width="0.8" opacity="0.45"/>
+<line x1="122" y1="132" x2="213.9" y2="128.8" stroke="#fbf4e6" stroke-width="0.8" opacity="0.45"/>
+<line x1="122" y1="132" x2="46.6" y2="79.2" stroke="#ffc766" stroke-width="1.0" opacity="0.8"/>
+<circle cx="122" cy="132" r="30.7" fill="none" stroke="#fbf4e6" stroke-width="0.9" opacity="0.28"/>
+<circle cx="122" cy="132" r="61.3" fill="none" stroke="#fbf4e6" stroke-width="0.9" opacity="0.28"/>
+<circle cx="122" cy="132" r="92.0" fill="none" stroke="#fbf4e6" stroke-width="0.9" opacity="0.6"/>
+<line x1="30" y1="132" x2="214" y2="132" stroke="#fbf4e6" stroke-width="0.8" opacity="0.14"/>
+<line x1="122" y1="40" x2="122" y2="224" stroke="#fbf4e6" stroke-width="0.8" opacity="0.14"/>
+<text x="122" y="36" text-anchor="middle" font-size="10" font-weight="600" fill="#e6d8bf">N</text>
+<circle cx="152.4" cy="108.2" r="3.8" fill="#000" opacity="0.35"/>
+<circle cx="152.4" cy="108.2" r="3.0" fill="#ff5a4a"/>
+<circle cx="105.3" cy="190.4" r="3.8" fill="#000" opacity="0.35"/>
+<circle cx="105.3" cy="190.4" r="3.0" fill="#ff5a4a"/>
+<circle cx="60.4" cy="63.6" r="3.0" fill="rgba(14,12,9,0.6)" stroke="#ff5a4a" stroke-width="1.2"/>
+<circle cx="151.2" cy="147.5" r="3.8" fill="#000" opacity="0.35"/>
+<circle cx="151.2" cy="147.5" r="3.0" fill="#fbf4e6"/>
+<circle cx="78.8" cy="147.7" r="3.8" fill="#000" opacity="0.35"/>
+<circle cx="78.8" cy="147.7" r="3.0" fill="#fbf4e6"/>
+<line x1="122" y1="132" x2="126.1" y2="122.9" stroke="#ffc766" stroke-width="1.4" stroke-linecap="round"/>
+<circle cx="122" cy="132" r="3.2" fill="#ffc766" stroke="#000" stroke-opacity="0.4" stroke-width="1"/>
+</g>
+<line x1="232" y1="150" x2="290" y2="170" stroke="#ffc766" stroke-width="1.2"/>
+<circle cx="305" cy="175" r="15" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="305" y="181" text-anchor="middle" font-size="17" font-weight="700" fill="#2a1d08">1</text>
+<line x1="1028" y1="436" x2="1080" y2="470" stroke="#ffc766" stroke-width="1.2"/>
+<circle cx="1094" cy="478" r="15" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="1094" y="484" text-anchor="middle" font-size="17" font-weight="700" fill="#2a1d08">2</text>
+<line x1="720" y1="330" x2="700" y2="268" stroke="#ffc766" stroke-width="1.2"/>
+<circle cx="696" cy="254" r="15" fill="#ffc766" stroke="#2a1d08" stroke-width="1.5"/><text x="696" y="260" text-anchor="middle" font-size="17" font-weight="700" fill="#2a1d08">3</text>
+<rect x="24" y="716" width="500" height="110" fill="rgba(23,18,13,0.58)" stroke="rgba(255,214,150,0.42)" stroke-width="1"/>
+<circle cx="46" cy="739" r="10" fill="#ffc766"/><text x="46" y="744" text-anchor="middle" font-size="13" font-weight="700" fill="#2a1d08">1</text>
+<text x="66" y="744" font-size="14.5" font-weight="400" fill="#fbf4e6" text-anchor="start" opacity="1.0">Radar map: top left, see-through, north at the top</text>
+<circle cx="46" cy="769" r="10" fill="#ffc766"/><text x="46" y="774" text-anchor="middle" font-size="13" font-weight="700" fill="#2a1d08">2</text>
+<text x="66" y="774" font-size="14.5" font-weight="400" fill="#fbf4e6" text-anchor="start" opacity="1.0">Health dots: appear when your guns point at an aircraft</text>
+<circle cx="46" cy="799" r="10" fill="#ffc766"/><text x="46" y="804" text-anchor="middle" font-size="13" font-weight="700" fill="#2a1d08">3</text>
+<text x="66" y="804" font-size="14.5" font-weight="400" fill="#fbf4e6" text-anchor="start" opacity="1.0">Trail: a light line when healthy, darker smoke with damage</text>
+</svg>

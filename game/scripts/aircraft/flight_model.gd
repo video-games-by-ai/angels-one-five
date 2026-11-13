@@ -116,7 +116,7 @@ func step(cmd: FlightCommand, dt: float, terrain: TerrainData) -> bool:
 	var power: float = throttle
 	if boosting:
 		power = pow(float(spec.boost_speed) / top, 2.0)
-	power *= lerpf(0.5, 1.0, zone_health[Airframes.Zone.ENGINE])  # a damaged engine loses power
+	power *= damage_power(zone_health[Airframes.Zone.ENGINE], hull_ratio())
 	g_load = 1.0 + absf(angular_rate.x) * speed / GRAVITY
 	var induced: float = maxf(g_load - 1.5, 0.0) * 0.55
 	var accel: float = thrust * power - drag * speed * speed - GRAVITY * fwd.y * 0.75 - induced
@@ -147,6 +147,15 @@ func velocity() -> Vector3:
 
 func hull_ratio() -> float:
 	return clampf(hull / float(spec.hull), 0.0, 1.0)
+
+
+## Share of engine power left after battle damage. A shot-up engine zone and a
+## badly holed (burning) airframe both cost power; the worse of the two applies,
+## never both, so a wreck keeps about 72% of its top speed (sqrt of 0.52).
+static func damage_power(engine_health: float, hull_share: float) -> float:
+	var engine: float = lerpf(0.5, 1.0, engine_health)
+	var burning: float = lerpf(0.52, 1.0, clampf((hull_share - 0.2) / 0.2, 0.0, 1.0))
+	return minf(engine, burning)
 
 
 ## Number of rounds leaving the guns this step. The trigger must be held; the

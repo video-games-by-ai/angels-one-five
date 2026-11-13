@@ -8,6 +8,9 @@ extends Control
 signal chosen(id: int)
 signal quit_requested
 signal map_requested
+signal host_requested(id: int)
+signal join_requested(id: int)
+signal settings_requested
 
 const TEXT: Color = Color("fbf4e6")
 const DIM: Color = Color("e6d8bf")
@@ -24,6 +27,7 @@ var normal_style: StyleBoxFlat
 var selected_style: StyleBoxFlat
 var engine_preview: AudioStreamPlayer
 var font_bold: Font
+var notice_label: Label
 
 
 func build(initial: int, map_name: String = "") -> void:
@@ -57,6 +61,9 @@ func build(initial: int, map_name: String = "") -> void:
 	center.add_child(column)
 
 	column.add_child(_label("CHOOSE YOUR AIRCRAFT", 34, TEXT, true, HORIZONTAL_ALIGNMENT_CENTER))
+	notice_label = _label("", 18, AMBER, true, HORIZONTAL_ALIGNMENT_CENTER)
+	notice_label.visible = false
+	column.add_child(notice_label)
 	var row: HBoxContainer = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 22)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -67,7 +74,7 @@ func build(initial: int, map_name: String = "") -> void:
 	footer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_child(footer)
 	footer.add_theme_constant_override("separation", 14)
-	var hint: Label = _label("← →  or  1 2 3  choose      ENTER / click  fly      M  change map", 15, DIM, false, HORIZONTAL_ALIGNMENT_LEFT)
+	var hint: Label = _label("← →  or  1 2 3  choose      ENTER / click  fly      M  change map      ESC  settings", 15, DIM, false, HORIZONTAL_ALIGNMENT_LEFT)
 	hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	footer.add_child(hint)
 	var map_button: Button = Button.new()
@@ -76,6 +83,24 @@ func build(initial: int, map_name: String = "") -> void:
 	map_button.focus_mode = Control.FOCUS_NONE
 	map_button.pressed.connect(func() -> void: map_requested.emit())
 	footer.add_child(map_button)
+	for entry: Array in [["Host match", true], ["Join match", false]]:
+		var online: Button = Button.new()
+		online.text = String(entry[0])
+		online.custom_minimum_size = Vector2(160, 42)
+		online.focus_mode = Control.FOCUS_NONE
+		var hosting: bool = entry[1]
+		online.pressed.connect(func() -> void:
+			if hosting:
+				host_requested.emit(selected)
+			else:
+				join_requested.emit(selected))
+		footer.add_child(online)
+	var settings_button: Button = Button.new()
+	settings_button.text = "Settings"
+	settings_button.custom_minimum_size = Vector2(130, 42)
+	settings_button.focus_mode = Control.FOCUS_NONE
+	settings_button.pressed.connect(func() -> void: settings_requested.emit())
+	footer.add_child(settings_button)
 	var quit: Button = Button.new()
 	quit.text = "Quit to desktop"
 	quit.custom_minimum_size = Vector2(180, 42)
@@ -85,6 +110,7 @@ func build(initial: int, map_name: String = "") -> void:
 
 	engine_preview = AudioStreamPlayer.new()
 	engine_preview.volume_db = -11.0
+	engine_preview.bus = GameSettings.BUS_ENGINE
 	engine_preview.pitch_scale = 0.84
 	add_child(engine_preview)
 	visible = false
@@ -94,6 +120,12 @@ func open() -> void:
 	visible = true
 	_set_stages_rendering(true)
 	select(selected, true)
+
+
+## A one-line message above the cards, e.g. why an online match ended.
+func notice(text: String) -> void:
+	notice_label.text = text
+	notice_label.visible = text != ""
 
 
 func close() -> void:
