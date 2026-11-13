@@ -91,12 +91,17 @@ damage so beginners last longer.
 
 ## Play
 
-**Windows:** unzip `build/airflight-windows.zip` and double-click `Airflight.exe`.
-No installer is needed. It requires 64-bit Windows 10/11 and a Vulkan-capable GPU
-with a current driver. The Windows build is exported and its data pack was
-smoke-tested under Linux, but it **has not yet been run on a Windows PC**.
+Download the packages from the
+[latest release](https://github.com/video-games-by-ai/angels-one-five/releases/latest).
+No installer is needed; both need a Vulkan-capable GPU with a current driver.
 
-**Linux:**
+**Windows:** unzip `airflight-windows.zip` and double-click `Airflight.exe`.
+It requires 64-bit Windows 10/11. The Windows build is exported and its data
+pack was smoke-tested under Linux, but it **has not yet been run on a Windows PC**.
+
+**Linux:** unpack `airflight-linux.tar.gz` and run `./airflight.x86_64`.
+
+**Linux, from a checkout:**
 
 ```sh
 ./run.sh
@@ -248,6 +253,7 @@ Everything is original or freely licensed; nothing is downloaded at build time
 | Conifers | `tools/build_trees.py` → `source-assets/trees.blend` | `game/assets/models/trees.glb` |
 | Three engines (two loops each), three guns (three takes each), gun jam, near miss, hits, explosion, wind (synthesised) | `tools/generate_audio.py` | `game/assets/audio/` |
 | Packages for Linux and Windows | `tools/build_release.sh` | `build/` |
+| GitHub release with both packages | `tools/publish_release.sh` | [Releases](https://github.com/video-games-by-ai/angels-one-five/releases) |
 
 Rebuild steps:
 
@@ -259,6 +265,10 @@ blender --background --factory-startup --python tools/build_trees.py
 python3 tools/generate_audio.py
 tools/build_release.sh
 ```
+
+To publish a release, bump `config/version` in `game/project.godot`, commit and
+push, then run `tools/publish_release.sh`. It rebuilds both packages from that
+commit, tags it `vX.Y.Z` and uploads them (`--dry-run` builds without publishing).
 
 **Plav & Gusinje is built in layers** (see the top of `tools/generate_plav.py`),
 so each can be refined on its own. `docs/plav_layers.png` shows them side by side.

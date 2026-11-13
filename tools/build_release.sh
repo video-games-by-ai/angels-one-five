@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild the game packages: import, run the headless tests, export Linux and
-# Windows, and zip the Windows build with its licences and a short readme.
+# Windows, and archive each build with its licences and a short readme
+# (build/airflight-linux.tar.gz and build/airflight-windows.zip).
 # Requires Godot 4.5.1 with export templates (set AIRFLIGHT_GODOT if needed).
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,13 +13,13 @@ cd "$ROOT"
 mkdir -p build/airflight-linux build/airflight-windows
 "$GODOT" --headless --path game --export-release "Linux"
 "$GODOT" --headless --path game --export-release "Windows"
-cp -r LICENSE licenses build/airflight-windows/
-cat > build/airflight-windows/README.txt <<'EOF'
+# Each package carries the licences and a short readme. $2 is the start line.
+package_notes() {
+	cp -r LICENSE licenses "$1/"
+	cat > "$1/README.txt" <<EOF
 AIRFLIGHT - 1940s arcade dogfights over an Alpine valley
 
-Double-click Airflight.exe to play. No installer is needed.
-Requires 64-bit Windows 10/11 and a graphics card with Vulkan support
-(any GeForce GTX 900 / Radeon RX 400 / Intel Iris Xe or newer, current driver).
+$2
 
 Pick an aircraft (Spitfire, Mustang or Thunderbolt) and fight two AI fighters.
 Mouse steers toward the aim circle. Left click or Space fires. Shift boosts.
@@ -31,6 +32,14 @@ Online: one player presses Host match, opens UDP port 24555 on their router
 (or ticks "Open port automatically"), and sends the invite. Friends press
 Join match and paste it. The invite works like a password: share it privately.
 EOF
-rm -f build/airflight-windows.zip
+}
+package_notes build/airflight-windows "Double-click Airflight.exe to play. No installer is needed.
+Requires 64-bit Windows 10/11 and a graphics card with Vulkan support
+(any GeForce GTX 900 / Radeon RX 400 / Intel Iris Xe or newer, current driver)."
+package_notes build/airflight-linux "Run ./airflight.x86_64 to play. No installer is needed.
+Requires 64-bit Linux and a graphics card with Vulkan support
+(any GeForce GTX 900 / Radeon RX 400 / Intel Iris Xe or newer, current driver)."
+rm -f build/airflight-windows.zip build/airflight-linux.tar.gz
 (cd build && python3 -c "import shutil; shutil.make_archive('airflight-windows', 'zip', '.', 'airflight-windows')")
-ls -la build/airflight-linux build/airflight-windows.zip
+tar -C build -czf build/airflight-linux.tar.gz airflight-linux
+ls -la build/airflight-linux.tar.gz build/airflight-windows.zip
