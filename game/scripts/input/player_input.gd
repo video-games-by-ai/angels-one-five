@@ -12,6 +12,7 @@ var settings: GameSettings
 var aim_direction: Vector3 = Vector3.FORWARD
 var camera_up: Vector3 = Vector3.UP
 var enabled: bool = true
+var typing: bool = false          ## a chat line is open: keys write text, the mouse still flies
 var idle_time: float = 0.0
 var arena_radius: float = 8600.0
 var arena_warning: bool = false
@@ -79,7 +80,7 @@ func apply_mouse(relative: Vector2) -> void:
 ## Build this tick's command. `nose` is the aircraft's forward direction.
 func sample(delta: float, aircraft_position: Vector3, nose: Vector3) -> FlightCommand:
 	idle_time += delta
-	if Input.is_action_just_pressed("center_aim"):
+	if not typing and Input.is_action_just_pressed("center_aim"):
 		aim_direction = nose
 	# Assisted levelling: an idle aim drifts back to the horizon.
 	if settings.level_assist and idle_time > LEVEL_DELAY and absf(aim_direction.y) < 0.85:
@@ -96,10 +97,12 @@ func sample(delta: float, aircraft_position: Vector3, nose: Vector3) -> FlightCo
 		aim_direction = aim_direction.slerp(target, 1.0 - exp(-delta * push * 1.2)).normalized()
 
 	command.aim_direction = aim_direction
-	command.throttle_axis = Input.get_axis("throttle_down", "throttle_up") if enabled else 0.0
-	command.roll_axis = Input.get_axis("roll_left", "roll_right") if enabled else 0.0
-	command.yaw_axis = Input.get_axis("yaw_left", "yaw_right") if enabled else 0.0
-	command.boost = enabled and Input.is_action_pressed("boost")
-	command.fire = enabled and Input.is_action_pressed("fire")
+	var keys: bool = enabled and not typing
+	command.throttle_axis = Input.get_axis("throttle_down", "throttle_up") if keys else 0.0
+	command.roll_axis = Input.get_axis("roll_left", "roll_right") if keys else 0.0
+	command.yaw_axis = Input.get_axis("yaw_left", "yaw_right") if keys else 0.0
+	command.boost = keys and Input.is_action_pressed("boost")
+	# While typing, Space is a space: only the mouse button fires.
+	command.fire = enabled and (Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) if typing else Input.is_action_pressed("fire"))
 	command.rocket = enabled and Input.is_action_just_pressed("rocket")
 	return command

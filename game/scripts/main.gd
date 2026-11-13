@@ -33,6 +33,7 @@ extends Node3D
 ##   --autostart=N            host: start the match once N players are in (server default 2)
 ##   --invite-out=PATH        host: write the invite to this file whenever it changes
 ##   --quit-after-matches=N   quit once N matches have ended (tests)
+##   --say=TEXT               send this chat line when the first match starts (tests, demos)
 
 const RESPAWN_DELAY: float = 3.0
 const ENEMY_RESPAWN_DELAY: float = 6.0
@@ -90,6 +91,7 @@ var opponent_hull: PackedFloat64Array = PackedFloat64Array()
 var net: NetSession
 var referee: MatchReferee         ## host only
 var lobby: Lobby
+var chat: ChatBox
 var online: bool = false          ## a networked match is being flown
 var world_dirty: bool = false     ## offline combatants were replaced; leaving reloads the scene
 var server_mode: bool = false
@@ -104,6 +106,7 @@ var autostart_wait: float = 0.0
 var invite_out: String = ""
 var invite_written: String = ""
 var matches_to_quit: int = 0
+var cli_say: String = ""
 var matches_ended: int = 0
 var net_tick: int = 0
 var latest_states: Dictionary = {}    ## host: combatant id -> newest accepted motion report
@@ -169,6 +172,8 @@ func _ready() -> void:
 			invite_out = arg.trim_prefix("--invite-out=")
 		elif arg.begins_with("--quit-after-matches="):
 			matches_to_quit = maxi(int(arg.trim_prefix("--quit-after-matches=")), 1)
+		elif arg.begins_with("--say="):
+			cli_say = arg.trim_prefix("--say=")
 	if not args_have_value("--port="):
 		net_port = settings.net_port
 	if not args_have_value("--score-limit="):
@@ -280,6 +285,9 @@ func _ready() -> void:
 	lobby.start_requested.connect(_net_start_match)
 	lobby.join_requested.connect(_join)
 	lobby.leave_requested.connect(_leave_online)
+	if not server_mode:
+		chat = ChatBox.new()   # above the lobby, below the pause menu (made later)
+		layer.add_child(chat)
 	ui_layer = layer
 	_apply_settings()
 	if pending_notice != "":
@@ -643,6 +651,7 @@ func _destroyed(c: Combatant, by: Combatant) -> void:
 func _process(delta: float) -> void:
 	elapsed += delta
 	_online_tick(delta)
+	_update_chat()
 	if mode == Mode.FLYING and player != null:
 		var shown: Transform3D = aircraft.get_global_transform_interpolated()
 		input.camera_up = camera.up_vector
@@ -786,13 +795,14 @@ func _connect_session() -> void:
 	net.player_left.connect(_on_player_left)
 	net.ended.connect(_on_session_ended)
 	net.changed.connect(_on_session_changed)
+	net.chat_received.connect(_on_chat_line)
 	net.drain.call_deferred()
 	_on_session_changed()
 
 
 func _disconnect_session() -> void:
 	for pair: Array in [[net.message, _on_net_message], [net.welcomed, _on_welcomed], [net.player_left, _on_player_left],
-			[net.ended, _on_session_ended], [net.changed, _on_session_changed]]:
+			[net.ended, _on_session_ended], [net.changed, _on_session_changed], [net.chat_received, _on_chat_line]]:
 		var sig: Signal = pair[0]
 		if sig.is_connected(pair[1]):
 			sig.disconnect(pair[1])
@@ -960,6 +970,9 @@ func _apply_match_start(msg: Dictionary) -> void:
 			referee.placed(c, c.model.position)
 	online = true
 	mode = Mode.FLYING
+	if cli_say != "":
+		net.say(cli_say)
+		cli_say = ""
 	lobby.close()
 	hangar.close()
 	if player == null:
@@ -1286,6 +1299,24 @@ func _online_tick(delta: float) -> void:
 			_net_start_match()
 	else:
 		autostart_wait = 0.0
+
+
+## Chat is open to anyone in an online lobby or match, unless a menu is up.
+## While its line is open the keyboard writes text instead of flying.
+func _update_chat() -> void:
+	if chat == null:
+		return
+	chat.session = net
+	chat.can_type = net != null and net.players.size() > 0 and (mode == Mode.LOBBY or (mode == Mode.FLYING and online)) \
+		and not (pause_menu != null and pause_menu.visible)
+	input.typing = chat.is_open()
+	if hud.visible and chat.busy():
+		hud.hint_time = minf(hud.hint_time, 1.0)   # the key hints share the corner: let them fade
+
+
+func _on_chat_line(line: Dictionary) -> void:
+	if server_mode or OS.get_cmdline_user_args().has("--log"):
+		print("CHAT %s: %s" % [String(line.name), String(line.text)])
 
 
 func _log_online() -> void:

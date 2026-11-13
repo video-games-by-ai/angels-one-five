@@ -71,6 +71,7 @@ open `game/project.godot` and press F5.
 | Q / E | Rudder |
 | C | Re-centre the aim on the nose |
 | Esc | Pause menu, settings and Change aircraft (on the selection screen: settings) |
+| Enter | Online: open the chat line; Enter sends, Esc cancels |
 | 1 / 2 / 3, ← / →, Enter | Choose and fly an aircraft on the selection screen |
 | M | Change map on the selection screen |
 | F11 | Fullscreen |
@@ -140,6 +141,14 @@ If your provider shares one address between customers (carrier-grade NAT), port
 forwarding cannot work: the lobby warns about it, and someone else should host.
 Esc during an online match opens the settings without pausing the others; its
 middle button ends the match (host) or leaves it.
+
+**Chat**, in the lobby and in flight: press **Enter**, type, **Enter** sends
+(**Esc** cancels). Lines appear small at the bottom left for everyone, newest at
+the bottom, at most five; each fades after 8 seconds and the recent ones come
+back while you type. While the chat line is open the keys write text, and the
+mouse still steers and fires. A message is up to 80 characters. Sketches:
+[docs/sketches/chat-overview.svg](docs/sketches/chat-overview.svg),
+[docs/sketches/chat-states.svg](docs/sketches/chat-states.svg).
 
 If nobody can open a port, a small rented server can host with no pilot of its
 own: `./Airflight.x86_64 --headless -- --server --address=SERVER_IP` prints the
@@ -240,9 +249,12 @@ it end to end and AI pilots hunting over it without crashing.
 reports, hits, kills, respawns and the result, remote aircraft smoothing under
 packet loss, and real loopback connections for each security rule (wrong
 certificate, wrong or missing secret, blocking, unencrypted clients, junk
-packets, version mismatch, Kick, New invite). `tools/net_smoke.sh` plays a whole
-match between two headless copies of the game flown by the AI
-(`AIRFLIGHT_SERVER=1` for a dedicated server and two players).
+packets, version mismatch, Kick, New invite) and chat (relay, sender stamping,
+flood limit, fading and wrapping, typing without losing the mouse).
+`tools/net_smoke.sh` plays a whole match between two headless copies of the game
+flown by the AI, each sending a chat line (`AIRFLIGHT_SERVER=1` for a dedicated
+server and two players). `game/tests/render_chat.gd` draws the chat over game
+screenshots for checking its look.
 
 For an unattended demo, `--ai-player` lets an AI fly and fight for you, and
 `--aircraft=0|1|2` skips the selection screen:

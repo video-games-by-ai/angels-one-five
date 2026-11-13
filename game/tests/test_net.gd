@@ -30,6 +30,10 @@ func _init() -> void:
 	_test_bad_packets()
 	_test_version_mismatch()
 	_test_host_stop_reason()
+	_test_chat_protocol()
+	_test_chat_box()
+	_test_typing_keeps_mouse()
+	_test_chat_live()
 	print("NET TESTS: %s" % ("PASS" if failures == 0 else "%d FAILED" % failures))
 	quit(1 if failures > 0 else 0)
 
@@ -135,6 +139,7 @@ func _samples() -> Array[Dictionary]:
 		{"type": NetProtocol.Msg.MATCH_END, "winner": 0, "scores": [{"id": 0, "kills": 5, "losses": 1}, {"id": 1, "kills": 1, "losses": 5}]},
 		{"type": NetProtocol.Msg.LOBBY},
 		{"type": NetProtocol.Msg.LEFT, "id": 1},
+		{"type": NetProtocol.Msg.CHAT, "peer": 77, "name": "Ana", "text": "rematch after this one?"},
 	]
 
 
@@ -195,7 +200,7 @@ func _test_protocol_fuzz() -> void:
 		var bytes: PackedByteArray
 		if i % 2 == 0:
 			bytes = crypto.generate_random_bytes(rng.randi_range(1, 120))
-			bytes[0] = rng.randi_range(1, 15)
+			bytes[0] = rng.randi_range(1, NetProtocol.Msg.CHAT)
 		else:
 			bytes = NetProtocol.encode(samples[i % samples.size()])
 			for k in range(rng.randi_range(1, 3)):
@@ -671,3 +676,95 @@ func _test_host_stop_reason() -> void:
 	host.close()
 	worker.wait_to_finish()
 	check(_ended(client) and reason == ["The host stopped the match."], "when the host stops, joiners are told so (%s)" % str(reason))
+
+
+# --- Chat ----------------------------------------------------------------------
+
+func _test_chat_protocol() -> void:
+	var back: Dictionary = NetProtocol.decode(NetProtocol.encode({"type": NetProtocol.Msg.CHAT, "peer": 77, "name": "Ana", "text": "  break left\n "}))
+	check(int(back.get("peer", 0)) == 77 and String(back.get("name", "")) == "Ana" and String(back.get("text", "")) == "break left",
+		"a chat line arrives with its sender, cleaned of control characters")
+	var long: Dictionary = NetProtocol.decode(NetProtocol.encode({"type": NetProtocol.Msg.CHAT, "text": "x".repeat(200)}))
+	check(String(long.get("text", "")).length() == NetProtocol.CHAT_MAX, "a chat line is cut to %d characters" % NetProtocol.CHAT_MAX)
+	# 80 four-byte characters are 320 bytes, more than a one-byte length can say.
+	var wide: Dictionary = NetProtocol.decode(NetProtocol.encode({"type": NetProtocol.Msg.CHAT, "text": "😀".repeat(80)}))
+	check(not wide.is_empty() and String(wide.text).length() > 50 and String(wide.text).length() < 80,
+		"a line of wide characters is shortened to fit, not garbled (%d kept)" % String(wide.get("text", "")).length())
+	check(NetProtocol.decode(NetProtocol.encode({"type": NetProtocol.Msg.CHAT, "text": " \t "})).is_empty(), "an empty chat line is refused")
+	check(NetProtocol.FROM_CLIENT.has(NetProtocol.Msg.CHAT), "joiners may send chat")
+
+
+func _test_chat_box() -> void:
+	check(ChatBox.line_alpha(0.0) == 1.0 and ChatBox.line_alpha(7.9) == 1.0 and absf(ChatBox.line_alpha(8.5) - 0.5) < 0.01
+		and ChatBox.line_alpha(9.0) == 0.0 and ChatBox.line_alpha(60.0) == 0.0, "a chat line shows for 8 s, then fades out over 1 s")
+	var font: Font = load("res://assets/fonts/Montserrat-Regular.otf")
+	var short: PackedStringArray = ChatBox.wrap_rows("rematch after this one?", font, 15, 380.0)
+	var long: PackedStringArray = ChatBox.wrap_rows("smoking badly and heading for the lake, cover me while I try to put it down on the ice", font, 15, 330.0)
+	var fits: bool = true
+	for row in long:
+		fits = fits and font.get_string_size(row, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x <= 330.0
+	check(short.size() == 1 and long.size() >= 2 and fits and " ".join(long).begins_with("smoking badly"), "long chat lines wrap between words, inside the box")
+	var unbroken: PackedStringArray = ChatBox.wrap_rows("a".repeat(80), font, 15, 200.0)
+	check(unbroken.size() >= 2 and "".join(unbroken) == "a".repeat(80), "a word too long for one row is split, nothing lost")
+
+
+## While a chat line is open the keys write text, but the mouse still flies and fires.
+func _test_typing_keeps_mouse() -> void:
+	PlayerInput.register_actions()
+	var input: PlayerInput = PlayerInput.new()
+	input.settings = GameSettings.new()
+	input.reset(Vector3.FORWARD)
+	Input.action_press("throttle_up")
+	Input.action_press("roll_left")
+	Input.action_press("fire")
+	var flying: FlightCommand = input.sample(0.016, Vector3.ZERO, Vector3.FORWARD)
+	var flying_throttle: float = flying.throttle_axis
+	var flying_fire: bool = flying.fire
+	input.typing = true
+	var typing: FlightCommand = input.sample(0.016, Vector3.ZERO, Vector3.FORWARD)
+	check(flying_throttle > 0.5 and flying_fire, "keys fly the aircraft normally")
+	check(typing.throttle_axis == 0.0 and typing.roll_axis == 0.0 and not typing.fire, "while typing, letters and Space do not fly or fire")
+	input.apply_mouse(Vector2(120, 0))
+	check(not input.aim_direction.is_equal_approx(Vector3.FORWARD), "while typing, the mouse still steers")
+	for action in ["throttle_up", "roll_left", "fire"]:
+		Input.action_release(action)
+	input.free()
+
+
+func _test_chat_live() -> void:
+	var host: NetSession = _host(PORT + 8)
+	var client: NetSession = _client(Invite.decode(host.invite_text()))
+	_pump([host, client], 6.0, func() -> bool: return host.players.size() == 2 and client.players.size() == 2)
+	var me: int = client.my_id()
+	client.say("rematch after this one?")
+	host.say("sure, same valley")
+	_pump([host, client], 2.0, func() -> bool: return host.chat_log.size() == 2 and client.chat_log.size() == 2)
+	var same: bool = host.chat_log.size() == 2 and client.chat_log.size() == 2
+	for i in range(2 if same else 0):
+		same = same and String(host.chat_log[i].text) == String(client.chat_log[i].text) and int(host.chat_log[i].peer) == int(client.chat_log[i].peer)
+	check(same, "both players see the same chat lines, in the same order")
+	var joiner_line: Dictionary = {}
+	for line in client.chat_log:
+		if String(line.text) == "rematch after this one?":
+			joiner_line = line
+	check(int(joiner_line.get("peer", 0)) == me and String(joiner_line.get("name", "")) == "Ana", "a joiner's line comes back to them under their own name")
+	check(client.chat_log.any(func(l: Dictionary) -> bool: return int(l.peer) == 1 and String(l.name) == "Host"), "the host's line reaches the joiner under the host's name")
+	# A joiner cannot speak as someone else: the host stamps the sender.
+	client._send_raw(1, {"type": NetProtocol.Msg.CHAT, "peer": 1, "name": "Host", "text": "I am the host"})
+	_pump([host, client], 2.0, func() -> bool: return host.chat_log.size() == 3)
+	var forged: Dictionary = host.chat_log[host.chat_log.size() - 1]
+	check(String(forged.text) == "I am the host" and int(forged.peer) == me and String(forged.name) == "Ana", "a joiner cannot pose as the host in chat")
+	# Flooding: past a short burst, lines are dropped and the joiner stays connected.
+	var before: int = host.chat_log.size()
+	for i in range(12):
+		client.say("spam %d" % i)
+	_pump([host, client], 1.5)
+	var relayed: int = host.chat_log.size() - before
+	check(relayed >= 1 and relayed <= NetSession.CHAT_BURST and host.players.size() == 2,
+		"a chat flood is cut to %d lines and the sender is not dropped (%d relayed)" % [NetSession.CHAT_BURST, relayed])
+	for i in range(NetSession.CHAT_KEEP + 5):
+		host.say("line %d" % i)
+	check(host.chat_log.size() == NetSession.CHAT_KEEP, "only the newest %d chat lines are kept" % NetSession.CHAT_KEEP)
+	client.close()
+	host.close()
+	_pump([host, client], 0.2)

@@ -17,6 +17,7 @@ signal message(peer: int, msg: Dictionary)       ## a game message passed every 
 signal welcomed(map_id: String, in_match: bool)  ## joiner: the host accepted us
 signal player_left(peer: int)
 signal ended(reason: String)                     ## the session is over
+signal chat_received(line: Dictionary)           ## a chat line everyone in the session sees
 
 enum Role { NONE, HOST, CLIENT }
 
@@ -27,6 +28,9 @@ const HELLO_TIMEOUT: float = 5.0
 const BLOCK_AFTER: int = 5
 const BLOCK_SECONDS: float = 600.0
 const BAD_PACKET_LIMIT: int = 25
+const CHAT_KEEP: int = 20          ## chat lines remembered (the chat box shows the newest few)
+const CHAT_BURST: int = 4          ## host: messages one joiner may send at once…
+const CHAT_REFILL: float = 1.5     ## …then one more per this many seconds; extra ones are dropped
 
 static var current: NetSession
 
@@ -44,6 +48,9 @@ var local_frame: int = Airframes.Id.MUSTANG
 var players: Array[Dictionary] = []   ## lobby roster in join order: {peer, name, frame}
 var status: String = ""
 var reached_from_outside: bool = false
+## Chat lines, oldest first: {peer, name, text, at} with `at` in Time.get_ticks_msec().
+## Kept here so lines survive the scene reload a joiner does to load the host's map.
+var chat_log: Array[Dictionary] = []
 var port_mapper: PortMapper
 
 var _key: CryptoKey
@@ -62,6 +69,7 @@ var _close_reason: String = ""
 var _closing: bool = false
 var _sandbox: Node
 var _queue: Array = []
+var _chat_allowance: Dictionary = {}  ## host: peer -> messages it may still send now
 
 
 func _init() -> void:
@@ -309,6 +317,8 @@ func _physics_process(delta: float) -> void:
 	_clock += delta
 	mp.poll()
 	if role == Role.HOST:
+		for peer: int in _chat_allowance:
+			_chat_allowance[peer] = minf(float(_chat_allowance[peer]) + delta / CHAT_REFILL, CHAT_BURST)
 		for peer: int in _hello_deadline.keys():
 			_hello_deadline[peer] = float(_hello_deadline[peer]) - delta
 			if float(_hello_deadline[peer]) <= 0.0:
@@ -423,6 +433,7 @@ func _on_peer_disconnected(peer: int) -> void:
 		_count_failure(peer)   # left before proving it had the invite
 	_hello_deadline.erase(peer)
 	_bad_packets.erase(peer)
+	_chat_allowance.erase(peer)
 	if role != Role.HOST or not _greeted.has(peer):
 		return
 	_greeted.erase(peer)
@@ -469,11 +480,13 @@ func _on_packet(peer: int, bytes: PackedByteArray) -> void:
 			return
 		if type == NetProtocol.Msg.HELLO:
 			_on_hello(peer, msg)
+		elif type == NetProtocol.Msg.CHAT:
+			_on_chat_from(peer, String(msg.text))
 		else:
 			_deliver(peer, msg)
 		return
-	if peer != 1 or msg.is_empty() or NetProtocol.FROM_CLIENT.has(type):
-		return
+	if peer != 1 or msg.is_empty() or (NetProtocol.FROM_CLIENT.has(type) and type != NetProtocol.Msg.CHAT):
+		return   # chat is the one message that travels both ways
 	match type:
 		NetProtocol.Msg.WELCOME:
 			map_id = String(msg.map)
@@ -490,6 +503,8 @@ func _on_packet(peer: int, bytes: PackedByteArray) -> void:
 		NetProtocol.Msg.ROSTER:
 			players.assign(msg.players)
 			changed.emit()
+		NetProtocol.Msg.CHAT:
+			_add_chat(int(msg.peer), String(msg.name), String(msg.text))
 		_:
 			_deliver(peer, msg)
 
@@ -533,11 +548,50 @@ func _on_hello(peer: int, msg: Dictionary) -> void:
 	if player_name == "":
 		player_name = "Pilot"
 	_greeted[peer] = true
+	_chat_allowance[peer] = float(CHAT_BURST)
 	players.append({"peer": peer, "name": player_name, "frame": int(msg.frame)})
 	_update_capacity()
 	send(peer, {"type": NetProtocol.Msg.WELCOME, "map": map_id, "max_players": max_players, "in_match": in_match})
 	broadcast(_roster())
 	changed.emit()
+
+
+# --- Chat ----------------------------------------------------------------------
+# Joiners send their line to the host; the host stamps it with who sent it and
+# relays it to everyone, the sender included, so all players see the same list.
+
+## Send a chat line from this player. Empty lines are ignored.
+func say(text: String) -> void:
+	var clean: String = NetProtocol.clean_text(text, NetProtocol.CHAT_MAX)
+	if clean == "" or role == Role.NONE:
+		return
+	if role == Role.HOST:
+		if not dedicated:
+			_relay_chat(1, local_name, clean)
+	else:
+		_send_raw(1, {"type": NetProtocol.Msg.CHAT, "text": clean})
+
+
+## Host: a joiner's chat line. Past its allowance it is dropped quietly.
+func _on_chat_from(peer: int, text: String) -> void:
+	if float(_chat_allowance.get(peer, 0.0)) < 1.0:
+		return
+	_chat_allowance[peer] = float(_chat_allowance[peer]) - 1.0
+	var who: Dictionary = player(peer)
+	_relay_chat(peer, String(who.get("name", "Pilot")), text)
+
+
+func _relay_chat(peer: int, from_name: String, text: String) -> void:
+	broadcast({"type": NetProtocol.Msg.CHAT, "peer": peer, "name": from_name, "text": text})
+	_add_chat(peer, from_name, text)
+
+
+func _add_chat(peer: int, from_name: String, text: String) -> void:
+	var line: Dictionary = {"peer": peer, "name": from_name if from_name != "" else "Pilot", "text": text, "at": Time.get_ticks_msec()}
+	chat_log.append(line)
+	if chat_log.size() > CHAT_KEEP:
+		chat_log.pop_front()
+	chat_received.emit(line)
 
 
 func _roster() -> Dictionary:

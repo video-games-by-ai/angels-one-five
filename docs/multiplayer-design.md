@@ -224,6 +224,7 @@ responsive flight model. `FlightModel` would support it later without a redesign
 | `damage` | reliable | when it happens | target, shooter, zone, new hull and zone health |
 | `destroyed`, `spawn`, `score` | reliable | when it happens | ids, position and heading, totals |
 | `hello`, `roster`, `match` | reliable | lobby and match changes | names, aircraft, teams, start, end, rematch |
+| `chat` | reliable | when someone talks | sender, name and up to 80 characters. A joiner sends only the text; the host stamps the sender and relays it to everyone, the sender included, so all see the same lines. Past a burst of 4, one line per 1.5 s per joiner; extra lines are dropped |
 
 Each client sends its own `state` to the host. The host checks it and sends every
 client one combined packet per tick with everyone else's state. In 1v1 that is a
@@ -323,6 +324,7 @@ above.
 | `--autostart=N` | Host: start once N players are in (server default 2) |
 | `--invite-out=PATH` | Host: write the invite to a file whenever it changes |
 | `--quit-after-matches=N` | Quit after N matches (tests) |
+| `--say=TEXT` | Send this chat line when the first match starts (tests, demos). With `--log`, chat lines are printed as `CHAT name: text` |
 
 ## Security summary
 
@@ -462,6 +464,14 @@ All on Godot 4.5.1, Linux, 2026-11-12.
   Junk packets never reach the game, and the sender is disconnected. A different
   version is refused with a clear message. No script contains remote calls, and
   object decoding is off.
+- **Chat (added 2026-11-13):** a line round-trips with its sender, is cleaned of
+  control characters, cut to 80 characters, and a line of 4-byte characters is
+  shortened to fit its one-byte length instead of being garbled. Empty lines are
+  refused. Over loopback both players see the same lines in the same order; a
+  joiner's line comes back under their own name; a joiner cannot pose as the
+  host; a flood of 12 lines is cut to the burst and the sender stays connected.
+  A line shows for 8 s and fades over 1 s; long lines wrap inside the box. While
+  typing, held flight keys and Space do nothing and the mouse still steers.
 
 **`tools/net_smoke.sh`**: whole matches between separate headless game
 processes over loopback, all pilots flown by the AI, first to 2 kills.
@@ -473,6 +483,8 @@ processes over loopback, all pilots flown by the AI, first to 2 kills.
   processes showed the same result, and both quit.
 - Dedicated server and two joiners: the same, with the server flying no
   aircraft and relaying the two players.
+- Chat (2026-11-13): host and joiner each send a line when the match starts
+  (`--say`); the script fails unless every process's log shows both lines.
 
 **Lobby screens:** rendered off-screen with live sessions by
 `game/tests/render_lobby.gd` and checked by eye: the host screen with the
@@ -486,6 +498,12 @@ The joiner sees the host's Thunderbolt in the target bracket under the host's
 name, and the damage the host decided on its own airframe panel.
 
 ![An online match from the joiner's side](screenshots/online-match.png)
+
+**Chat:** drawn by `game/tests/render_chat.gd` over game screenshots at
+1600×900: three lines with the oldest fading, the open chat line with recent
+lines shown again, and a long line wrapped over two rows.
+
+![The chat box](screenshots/online-chat.png)
 
 Not tested:
 

@@ -5,20 +5,21 @@ extends RefCounted
 ## exact length and every value first; anything malformed decodes to {}. This is
 ## the only code that reads bytes from another machine.
 
-const VERSION: int = 1
+const VERSION: int = 2   ## 2: chat
 const MAX_PLAYERS: int = 4
 const NAME_MAX: int = 16
 const REASON_MAX: int = 120
 const MAP_MAX: int = 32
+const CHAT_MAX: int = 80             ## characters in one chat message
 const MAX_CLAIMS: int = 8
 const MAX_ROUNDS_PER_CLAIM: int = 40
 const ZONES: int = 5
 const NO_ONE: int = 255
 
-enum Msg { HELLO = 1, WELCOME, REJECT, ROSTER, MATCH_START, STATE, WORLD, HIT_CLAIM, DAMAGE, CRASHED, DESTROYED, SPAWN, MATCH_END, LOBBY, LEFT }
+enum Msg { HELLO = 1, WELCOME, REJECT, ROSTER, MATCH_START, STATE, WORLD, HIT_CLAIM, DAMAGE, CRASHED, DESTROYED, SPAWN, MATCH_END, LOBBY, LEFT, CHAT }
 
 ## What a joiner may send. Everything else only the host may send.
-const FROM_CLIENT: Array[int] = [Msg.HELLO, Msg.STATE, Msg.HIT_CLAIM, Msg.CRASHED]
+const FROM_CLIENT: Array[int] = [Msg.HELLO, Msg.STATE, Msg.HIT_CLAIM, Msg.CRASHED, Msg.CHAT]
 ## Messages that are sent unreliably (a newer one replaces a lost one).
 const UNRELIABLE: Array[int] = [Msg.STATE, Msg.WORLD]
 
@@ -108,6 +109,11 @@ static func encode(m: Dictionary) -> PackedByteArray:
 			pass
 		Msg.LEFT:
 			w.put_u8(int(m.id))
+		Msg.CHAT:
+			# A joiner sends peer 0 and no name; the host fills both in when relaying.
+			w.put_u32(int(m.get("peer", 0)))
+			_put_text(w, String(m.get("name", "")), NAME_MAX)
+			_put_text(w, String(m.text), CHAT_MAX)
 		_:
 			push_error("NetProtocol: unknown message type %d" % type)
 			return PackedByteArray()
@@ -214,6 +220,11 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 		Msg.LEFT:
 			m.id = r.u8()
 			r.require(int(m.id) < MAX_PLAYERS)
+		Msg.CHAT:
+			m.peer = r.u32()
+			m.name = r.text(NAME_MAX)
+			m.text = r.text(CHAT_MAX)
+			r.require(String(m.text) != "")
 		_:
 			return {}
 	if not r.ok or not r.at_end():
@@ -261,7 +272,11 @@ static func _put_vec3(w: StreamPeerBuffer, v: Vector3) -> void:
 
 
 static func _put_text(w: StreamPeerBuffer, text: String, limit: int) -> void:
-	var bytes: PackedByteArray = clean_text(text, limit).to_utf8_buffer()
+	var clean: String = clean_text(text, limit)
+	var bytes: PackedByteArray = clean.to_utf8_buffer()
+	while bytes.size() > 255:   # the length is one byte: drop whole characters until it fits
+		clean = clean.left(-1)
+		bytes = clean.to_utf8_buffer()
 	w.put_u8(bytes.size())
 	w.put_data(bytes)
 
