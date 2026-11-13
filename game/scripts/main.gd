@@ -31,6 +31,7 @@ var aircraft: Aircraft
 var audio: EngineAudio
 var hud: Hud
 var pause_menu: PauseMenu
+var ui_layer: CanvasLayer
 var effects: Effects
 var aircraft_id: int = Airframes.Id.MUSTANG
 var respawn_timer: float = 0.0
@@ -127,12 +128,7 @@ func _ready() -> void:
 	if args.has("--no-hud"):
 		hud.process_mode = Node.PROCESS_MODE_DISABLED
 		hud.visible = false
-	pause_menu = PauseMenu.new()
-	pause_menu.build(settings)
-	pause_menu.resumed.connect(_resume)
-	pause_menu.quit_requested.connect(func() -> void: get_tree().quit())
-	pause_menu.settings_changed.connect(_apply_settings)
-	layer.add_child(pause_menu)
+	ui_layer = layer
 	_apply_settings()
 	_spawn()
 	if not use_autopilot:
@@ -192,6 +188,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_resume()
 		else:
 			get_tree().paused = true
+			_ensure_pause_menu()
 			pause_menu.visible = true
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event.is_action_pressed("toggle_fps"):
@@ -204,8 +201,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
+## The pause menu is created on first use. Its quality dropdown owns a hidden
+## popup window, and a hidden popup present while the main window is first shown
+## makes Godot 4.5 log harmless "disconnect a nonexistent connection" errors.
+func _ensure_pause_menu() -> void:
+	if pause_menu != null:
+		return
+	pause_menu = PauseMenu.new()
+	ui_layer.add_child(pause_menu)
+	pause_menu.build(settings)
+	pause_menu.resumed.connect(_resume)
+	pause_menu.quit_requested.connect(func() -> void: get_tree().quit())
+	pause_menu.settings_changed.connect(_apply_settings)
+
+
 func _resume() -> void:
-	pause_menu.visible = false
+	if pause_menu != null:
+		pause_menu.visible = false
 	get_tree().paused = false
 	if autopilot == null:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
