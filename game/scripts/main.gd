@@ -15,6 +15,7 @@ extends Node3D
 ##   --benchmark=SECONDS      autopilot + frame-time measurement, then quit
 ##   --benchmark-out=PATH     write benchmark results as JSON
 ##   --touch                  show the touch-screen controls on a computer (a touch screen shows them by itself)
+##   --tilt=X,Y,Z             diagnostics: a gravity reading for tilt steering, in screen axes (upright: 0,-9.8,0)
 ##   --diag                   device test: short flights with one more graphics feature off each time,
 ##                            logged to a folder (see DeviceDiag; the "diag" export feature does the same)
 ##   --autobench              benchmark Low, Medium and High in turn and show the results on screen
@@ -102,6 +103,7 @@ var autobench: bool = false
 var diag: bool = false            ## a DeviceDiag stage is being flown
 var diag_banner: Label
 var touch: TouchControls          ## on-screen flying controls; null without a touch screen
+var tilt_sensor_noted: bool = false
 var frame_times: PackedFloat32Array = PackedFloat32Array()
 var fixed_view: PackedFloat64Array = PackedFloat64Array()
 var forced_zoom: float = 0.0
@@ -164,6 +166,10 @@ func _ready() -> void:
 			opponent_count = clampi(int(arg.trim_prefix("--opponents=")), 0, 6)
 		elif arg.begins_with("--map=") and session_map == "":
 			session_map = arg.trim_prefix("--map=")
+		elif arg.begins_with("--tilt="):
+			var g: PackedFloat64Array = arg.trim_prefix("--tilt=").split_floats(",")
+			if g.size() == 3:
+				TouchControls.fake_gravity = Vector3(g[0], g[1], g[2])
 		elif arg.begins_with("--weather="):
 			settings.snow_showers = int(arg.trim_prefix("--weather=")) != 0
 		elif arg == "--ai-player":
@@ -340,6 +346,14 @@ func _ready() -> void:
 		layer.add_child(touch)
 		input.touch = touch
 		touch.zoom_pressed.connect(func() -> void: input.toggle_zoom())
+		touch.steer_by_tilt = settings.tilt_steering
+		touch.tilt_toggled.connect(func(on: bool) -> void:
+			settings.tilt_steering = on
+			settings.save()
+			if touch.tilting() == on:
+				hud.announce("TILT STEERING: LEAN THE PHONE" if on else "STICK STEERING")
+			else:
+				hud.announce("THIS DEVICE DOES NOT SENSE TILT"))
 		touch.pause_pressed.connect(_press_pause)
 	hangar = Hangar.new()
 	layer.add_child(hangar)
@@ -447,6 +461,7 @@ func _start_flight(id: int, remember: bool = true) -> void:
 	hud.visible = not OS.get_cmdline_user_args().has("--no-hud")
 	if autopilot == null and not ai_player:
 		_capture_mouse()
+	_centre_tilt()
 
 
 ## (Re)create a combatant's visual aircraft for its current type.
@@ -507,6 +522,9 @@ func _apply_settings() -> void:
 	DeviceDiag.mark("settings: %s quality, %s, msaa %d, fxaa %s, scale %.2f, snow %s" % [GameSettings.QUALITY_NAMES[settings.quality],
 		RenderingServer.get_current_rendering_method(), int(profile.msaa), profile.fxaa, float(profile.render_scale), settings.snow_showers])
 	settings.apply_audio()
+	if touch != null and touch.steer_by_tilt != settings.tilt_steering:
+		touch.steer_by_tilt = settings.tilt_steering
+		touch.release_stick()
 	var mode: DisplayServer.WindowMode = DisplayServer.WINDOW_MODE_FULLSCREEN if settings.fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 	if DisplayServer.window_get_mode() != mode and benchmark_seconds <= 0.0:
 		DisplayServer.window_set_mode(mode)
@@ -621,6 +639,7 @@ func _resume() -> void:
 		hangar.set_process_unhandled_input(true)
 		return
 	get_tree().paused = false
+	_centre_tilt()
 	if _player_flies():
 		_capture_mouse()
 
@@ -630,6 +649,23 @@ func _resume() -> void:
 func _capture_mouse() -> void:
 	if touch == null:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## Tilt steering: the way the phone is held as the pilot takes over (a sortie
+## begins, the pause menu closes) is level flight from then on.
+func _centre_tilt() -> void:
+	if touch != null:
+		touch.tilt.centre()
+
+
+## For the once-a-second log: what the gravity sensor says and what tilt
+## steering makes of it, so a phone that steers oddly can be read afterwards.
+func _tilt_note() -> String:
+	if touch == null or not touch.steer_by_tilt:
+		return ""
+	var g: Vector3 = TouchControls.gravity_now()
+	return " tilt g=(%.1f,%.1f,%.1f) lean=%d turn=%.2f climb=%d" % [g.x, g.y, g.z, roundi(rad_to_deg(touch.tilt.lean)),
+		touch.tilt.turn(), roundi(rad_to_deg(touch.tilt.elevation()))]
 
 
 ## The touch pause button does what Esc does.
@@ -758,7 +794,11 @@ func _process(delta: float) -> void:
 	if diag:
 		_diag_tick(delta)
 	else:
-		DeviceDiag.heartbeat(delta, "flying" if mode == Mode.FLYING else "menu")
+		DeviceDiag.heartbeat(delta, ("flying" if mode == Mode.FLYING else "menu") + _tilt_note())
+	if touch != null and not tilt_sensor_noted and TouchControls.gravity_now() != Vector3.ZERO:
+		tilt_sensor_noted = true
+		var g: Vector3 = TouchControls.gravity_now()
+		DeviceDiag.mark("tilt sensor: the %s reads (%.1f, %.1f, %.1f)" % ["gravity sensor" if Input.get_gravity() != Vector3.ZERO else "accelerometer", g.x, g.y, g.z])
 	_online_tick(delta)
 	_update_chat()
 	if mode == Mode.FLYING and player != null:
@@ -1232,6 +1272,7 @@ func _apply_match_start(msg: Dictionary) -> void:
 	hud.visible = not OS.get_cmdline_user_args().has("--no-hud")
 	if _player_flies():
 		_capture_mouse()
+	_centre_tilt()
 	print("NET: match started, %d players, first to %d" % [combatants.size(), score_limit])
 
 

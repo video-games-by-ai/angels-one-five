@@ -15,6 +15,7 @@ var panel: PanelContainer
 var title: Label
 var resume: Button
 var hangar: Button
+var tilt: CheckBox    ## on a touch screen only
 
 
 func build(game_settings: GameSettings) -> void:
@@ -46,8 +47,11 @@ func build(game_settings: GameSettings) -> void:
 	title.add_theme_font_size_override("font_size", 26)
 	box.add_child(title)
 
-	_slider(box, "Mouse sensitivity", 0.3, 2.5, 0.05, settings.mouse_sensitivity, func(v: float) -> void: settings.mouse_sensitivity = v)
-	_check(box, "Invert vertical mouse", settings.invert_y, func(v: bool) -> void: settings.invert_y = v)
+	var by_touch: bool = TouchControls.wanted()
+	if by_touch:
+		tilt = _check(box, "Tilt steering: lean the phone to fly", settings.tilt_steering, func(v: bool) -> void: settings.tilt_steering = v)
+	_slider(box, "Steering sensitivity" if by_touch else "Mouse sensitivity", 0.3, 2.5, 0.05, settings.mouse_sensitivity, func(v: float) -> void: settings.mouse_sensitivity = v)
+	_check(box, "Invert up and down" if by_touch else "Invert vertical mouse", settings.invert_y, func(v: bool) -> void: settings.invert_y = v)
 	_check(box, "Assisted levelling", settings.level_assist, func(v: bool) -> void: settings.level_assist = v)
 	_slider(box, "Camera shake", 0.0, 1.5, 0.05, settings.camera_shake, func(v: float) -> void: settings.camera_shake = v)
 	_slider(box, "Master volume", 0.0, 1.0, 0.05, settings.master_volume, func(v: float) -> void: settings.master_volume = v, true)
@@ -93,6 +97,8 @@ func open(from_hangar: bool) -> void:
 	title.text = "SETTINGS" if from_hangar else "PAUSED"
 	resume.text = "Back" if from_hangar else "Resume"
 	hangar.visible = not from_hangar
+	if tilt != null:
+		tilt.set_pressed_no_signal(settings.tilt_steering)   # the TILT button in flight changes it too
 	visible = true
 
 
@@ -132,7 +138,7 @@ func _slider(box: VBoxContainer, label_text: String, lo: float, hi: float, step:
 	row.add_child(readout)
 
 
-func _check(box: VBoxContainer, label_text: String, value: bool, apply: Callable) -> void:
+func _check(box: VBoxContainer, label_text: String, value: bool, apply: Callable) -> CheckBox:
 	var row: HBoxContainer = _row(box, label_text)
 	var check: CheckBox = CheckBox.new()
 	check.button_pressed = value
@@ -141,6 +147,7 @@ func _check(box: VBoxContainer, label_text: String, value: bool, apply: Callable
 		apply.call(v)
 		_changed())
 	row.add_child(check)
+	return check
 
 
 static func _theme() -> Theme:

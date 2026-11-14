@@ -175,10 +175,19 @@ The game builds for Android phones with the "Android" export preset
 `airflight-android.apk`: download it on the phone, tap it and allow the
 install from that app when Android asks.
 
-- **Flying:** the left thumb steers with a stick that appears where it lands;
-  the right thumb has FIRE, BOOST, BRAKE, ZOOM and pause. Tap an aircraft on the
-  selection screen to fly it. Throttle, roll, rudder, rockets and chat have no
-  touch controls yet.
+- **Flying:** the phone itself steers. Turn it like a steering wheel to turn:
+  the further it leans, the faster the turn, and held level it flies straight.
+  Tip its top edge toward you to climb and away from you to dive; holding it
+  tipped holds the climb, and the way you hold it when a flight starts (or after
+  a pause) is level flight. A tap on the ring at the lower left takes the way
+  you hold it now as level. The ring shows what the lean is asking for.
+  The **TILT** button in the lower-left corner (or "Tilt steering" in Settings)
+  switches to a thumb stick instead: it appears where the left thumb lands, and
+  pushing it swings the aim. Phones without a gravity sensor always use the
+  stick. The right thumb has FIRE, BOOST, BRAKE, ZOOM and pause. Tap an aircraft
+  on the selection screen to fly it. Throttle, roll, rudder, rockets and chat
+  have no touch controls yet, and tilt steering does not loop (it climbs and
+  dives up to 60 degrees; the stick goes over the top).
 - **Device test:** the selection screen has a **Device test** button. It flies
   twelve short autopilot flights, each with one more graphics feature switched
   off, restarts the game between them and ends with a report. The game also
@@ -417,7 +426,7 @@ engine loop that would clip.
 - `world/`: terrain data and LOD tiles, atmosphere (sky, sun, haze, post), clouds, weather (snow showers), forest, village houses, effects
 - `aircraft/`: aircraft data and balance, flight model (fixed-step, network-ready), aircraft visuals, player audio, autopilot
 - `combat/`: bullets and tracers, combatants (player and AI alike), AI pilot
-- `input/`: `FlightCommand`, the device-independent pilot intent, the mouse/keyboard source and the on-screen touch controls
+- `input/`: `FlightCommand`, the device-independent pilot intent, the mouse/keyboard source and the on-screen touch controls, with tilt steering from the phone's gravity sensor
 - `camera/`: chase camera with boost pull-back and adjustable shake
 - `net/`: online play: invite, message format, session (encryption, secret check, lobby), the host's referee, remote aircraft smoothing, UPnP and address detection
 - `ui/`: aircraft selection, online lobby, HUD with target markers, the see-through airframe damage panel and the opponent's target panel, lens flare, pause menu

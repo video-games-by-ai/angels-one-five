@@ -14,6 +14,7 @@ const OUTPUT_CEILING_DB: float = -1.0       ## nothing leaves the game louder th
 var mouse_sensitivity: float = 1.0
 var invert_y: bool = false
 var level_assist: bool = true
+var tilt_steering: bool = true   ## touch screens: lean the phone to steer; off: the thumb stick
 var camera_shake: float = 0.6
 var master_volume: float = 0.8
 var engine_volume: float = 1.0
@@ -45,6 +46,7 @@ static func load_or_default(path: String = PATH) -> GameSettings:
 		s.mouse_sensitivity = float(cfg.get_value("controls", "mouse_sensitivity", s.mouse_sensitivity))
 		s.invert_y = bool(cfg.get_value("controls", "invert_y", s.invert_y))
 		s.level_assist = bool(cfg.get_value("controls", "level_assist", s.level_assist))
+		s.tilt_steering = bool(cfg.get_value("controls", "tilt_steering", s.tilt_steering))
 		s.camera_shake = float(cfg.get_value("camera", "shake", s.camera_shake))
 		s.master_volume = clampf(float(cfg.get_value("audio", "master_volume", s.master_volume)), 0.0, 1.0)
 		s.engine_volume = clampf(float(cfg.get_value("audio", "engine_volume", s.engine_volume)), 0.0, 1.0)
@@ -70,6 +72,7 @@ func save(path: String = PATH) -> void:
 	cfg.set_value("controls", "mouse_sensitivity", mouse_sensitivity)
 	cfg.set_value("controls", "invert_y", invert_y)
 	cfg.set_value("controls", "level_assist", level_assist)
+	cfg.set_value("controls", "tilt_steering", tilt_steering)
 	cfg.set_value("camera", "shake", camera_shake)
 	cfg.set_value("audio", "master_volume", master_volume)
 	cfg.set_value("audio", "engine_volume", engine_volume)

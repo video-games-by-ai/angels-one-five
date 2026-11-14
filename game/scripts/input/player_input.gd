@@ -2,13 +2,15 @@ class_name PlayerInput
 extends Node
 ## Mouse and keyboard pilot. The mouse swings a free aim direction around the
 ## camera; the aircraft flies toward it. On a touch screen the on-screen stick
-## and buttons (TouchControls) drive the same aim and the same FlightCommand.
+## and buttons (TouchControls) drive the same aim and the same FlightCommand,
+## or, with tilt steering, the way the phone is held does (TiltSteering).
 
 const MOUSE_SCALE: float = 0.0021
 const LEVEL_DELAY: float = 1.1
 const ZOOM_STEP: float = 1.26       ## one wheel notch; three notches double the magnification
 const ZOOM_DEFAULT: float = 3.0     ## where Z zooms to until the wheel has picked a level
 const STICK_RATE: float = 760.0     ## touch stick at full push, in mouse pixels per second (about 90 degrees a second)
+const LEAD_MAX: float = deg_to_rad(50.0)   ## touch steering never puts the aim further than this ahead of the nose
 
 var command: FlightCommand = FlightCommand.new()
 var settings: GameSettings
@@ -122,8 +124,15 @@ func sample(delta: float, aircraft_position: Vector3, nose: Vector3) -> FlightCo
 	if touch != null and touch.visible:
 		# The further the stick is pushed, the faster the aim swings; the square
 		# keeps small corrections fine. Zoom and sensitivity apply as to the mouse.
-		if enabled:
+		if enabled and touch.tilting():
+			steer_by_tilt(delta, nose)
+		elif enabled:
 			apply_mouse(touch.stick * touch.stick.length() * STICK_RATE * delta)
+			# A held stick must not wind the aim round behind an aircraft that
+			# cannot turn as fast: letting go then stops the turn promptly.
+			var lead: float = nose.angle_to(aim_direction)
+			if lead > LEAD_MAX:
+				aim_direction = nose.slerp(aim_direction, LEAD_MAX / lead).normalized()
 		command.aim_direction = aim_direction
 		command.throttle_axis = 0.0
 		command.roll_axis = 0.0
@@ -144,3 +153,23 @@ func sample(delta: float, aircraft_position: Vector3, nose: Vector3) -> FlightCo
 	command.fire = enabled and Input.is_action_pressed("fire")
 	command.rocket = enabled and Input.is_action_just_pressed("rocket")
 	return command
+
+
+## Tilt steering: the lean swings the heading, the tip sets the climb angle.
+func steer_by_tilt(delta: float, nose: Vector3) -> void:
+	var tilt: TiltSteering = touch.tilt
+	var sens: float = settings.mouse_sensitivity * aim_scale
+	tilt.feed(TouchControls.gravity_now(), delta, sens)
+	var heading: Vector3 = Vector3(aim_direction.x, 0.0, aim_direction.z)
+	var nose_flat: Vector3 = Vector3(nose.x, 0.0, nose.z)
+	var nose_known: bool = nose_flat.length_squared() > 0.09   # not while it points straight up or down
+	if heading.length_squared() < 0.0001:
+		heading = nose_flat if nose_known else Vector3.FORWARD
+	heading = heading.normalized().rotated(Vector3.UP, -tilt.turn() * STICK_RATE * MOUSE_SCALE * sens * delta)
+	if nose_known:
+		var lead: float = nose_flat.normalized().signed_angle_to(heading, Vector3.UP)
+		if absf(lead) > LEAD_MAX:
+			heading = nose_flat.normalized().rotated(Vector3.UP, signf(lead) * LEAD_MAX)
+	var climb: float = tilt.elevation() * (-1.0 if settings.invert_y else 1.0)
+	aim_direction = (heading * cos(climb) + Vector3.UP * sin(climb)).normalized()
+	idle_time = 0.0   # the phone holds the climb; assisted levelling has nothing to do

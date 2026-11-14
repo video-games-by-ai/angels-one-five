@@ -621,8 +621,12 @@ func _draw_hints(s: float) -> void:
 		"F4  snow showers on / off (weather test)",
 	]
 	if input != null and input.touch != null:
+		var steer: String = "LEFT THUMB  push the stick the way you want to fly"
+		if input.touch.tilting():
+			steer = "LEAN the phone to turn, tip it back to climb"
 		lines = [
-			"LEFT THUMB  push the stick the way you want to fly",
+			steer,
+			"TILT  steer by leaning the phone, or by stick",
 			"FIRE  hold to shoot; aim ahead of a turning target",
 			"Fire in bursts: the guns overheat, then must cool",
 			"BOOST  hold for speed      BRAKE  hold to slow down",
