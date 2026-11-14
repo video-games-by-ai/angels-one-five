@@ -245,10 +245,12 @@ nothing.
      closed again when you stop hosting);
    - allow Airflight through your computer's firewall when it asks;
    - press **Detect** (or type your public address or a dynamic DNS name);
-   - press **Copy invite** and send it to your friends in a private chat.
+   - press **Copy invite** and send it to your friends in a private chat. It
+     is one line of about 70 characters starting with `AF2.`.
 2. **Friends:** choose an aircraft, press **Join match**, then **Paste**. The
    invite is checked at once: the game shows the host's address, or says what
-   is wrong (for example how many of its characters did not arrive), and
+   is wrong (for example how many of its characters did not arrive, or that
+   one was changed), and
    **Join** works only for a sound invite. **Clear** empties the field. Line
    breaks and spaces added by chat or mail programs do not matter.
 3. The host sees who is in (and can **Kick**), and presses **Start match**. After
@@ -257,6 +259,11 @@ nothing.
 The invite works like a password. The connection is encrypted, a joiner checks
 it has reached the real host, and the host lets in only games holding the
 invite's secret. Five failed attempts from one address block it for ten minutes.
+The invite holds a fingerprint of the host's encryption certificate, not the
+certificate: a joining game first asks the host for the certificate, accepts it
+only if it matches the fingerprint, and sends the secret only after that. Both
+players need the same version of the game; invites from 0.2.0 and earlier
+(starting with `AF1.`) are refused with a message saying so.
 If your provider shares one address between customers (carrier-grade NAT), port
 forwarding cannot work: the lobby warns about it, and someone else should host.
 Esc during an online match opens the settings without pausing the others; its
@@ -375,8 +382,9 @@ it end to end and AI pilots hunting over it without crashing.
 `game/tests/test_net.gd` checks online play: invites and every message type
 (including truncated, damaged and random packets), the host's rules for motion
 reports, hits, kills, respawns and the result, remote aircraft smoothing under
-packet loss, and real loopback connections for each security rule (wrong
-certificate, wrong or missing secret, blocking, unencrypted clients, junk
+packet loss, and real loopback connections for each security rule (a host
+that is not the invite's, impostors answering with their own, damaged or the
+relayed real certificate, wrong or missing secret, blocking, unencrypted clients, junk
 packets, version mismatch, Kick, New invite) and chat (relay, sender stamping,
 flood limit, fading and wrapping, typing without losing the mouse).
 `tools/net_smoke.sh` plays a whole match between two headless copies of the game

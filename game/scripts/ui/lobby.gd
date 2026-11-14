@@ -170,7 +170,7 @@ func build(game_settings: GameSettings) -> void:
 	paste_row.add_theme_constant_override("separation", 10)
 	paste_edit = LineEdit.new()
 	paste_edit.secret = true
-	paste_edit.placeholder_text = "AF1.…"
+	paste_edit.placeholder_text = "AF2.…"
 	paste_edit.max_length = Invite.MAX_TEXT
 	paste_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	paste_edit.custom_minimum_size = Vector2(0, 40)

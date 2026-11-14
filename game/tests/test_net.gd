@@ -11,7 +11,9 @@ var crypto: Crypto = Crypto.new()
 var terrain: TerrainData
 
 
-func _init() -> void:
+## Not _init: the engine loads its certificate store after scripts are created,
+## and the first, unverified connection of a join cannot start without it.
+func _initialize() -> void:
 	terrain = TerrainData.load_default()
 	_test_invite()
 	_test_protocol()
@@ -24,6 +26,8 @@ func _init() -> void:
 	_test_no_remote_calls()
 	_test_connect_and_talk()
 	_test_wrong_certificate()
+	_test_impostor_host()
+	_test_fetch_limit()
 	_test_wrong_and_missing_secret()
 	_test_blocking()
 	_test_unencrypted_client()
@@ -53,27 +57,42 @@ func _cert_der() -> PackedByteArray:
 
 
 func _test_invite() -> void:
+	var cert: PackedByteArray = _cert_der()
 	var inv: Invite = Invite.new()
 	inv.address = "203.0.113.5"
 	inv.port = 24555
 	inv.secret = crypto.generate_random_bytes(16)
-	inv.certificate_der = _cert_der()
+	inv.certificate_hash = Invite.hash_of(cert)
 	var text: String = inv.encode()
 	var back: Invite = Invite.decode(text)
-	check(back != null and back.address == inv.address and back.port == inv.port and back.secret == inv.secret and back.certificate_der == inv.certificate_der,
+	check(back != null and back.address == inv.address and back.port == inv.port and back.secret == inv.secret and back.certificate_hash == inv.certificate_hash,
 		"an invite survives encoding (%d characters)" % text.length())
-	check(back != null and back.certificate() != null, "the certificate in an invite loads")
+	var longest: Invite = Invite.new()
+	longest.address = "198.151.100.255"
+	longest.port = 65535
+	longest.secret = inv.secret
+	longest.certificate_hash = inv.certificate_hash
+	check(text.length() <= 80 and longest.encode().length() <= 80, "an invite to any IPv4 address is at most 80 characters (%d)" % longest.encode().length())
 	check(Invite.decode("  " + text + "\n") != null, "surrounding whitespace from a paste is ignored")
 	var named: Invite = Invite.new()
 	named.address = "pilots.example.net"
 	named.port = 30000
 	named.secret = inv.secret
-	named.certificate_der = inv.certificate_der
+	named.certificate_hash = inv.certificate_hash
 	check(Invite.decode(named.encode()) != null and Invite.decode(named.encode()).address == "pilots.example.net", "a DNS name works as the address")
+	# The certificate a host sends is accepted only if it is the invite's, byte for byte.
+	var flipped: PackedByteArray = cert.duplicate()
+	flipped[200] ^= 0x01
+	var padded: PackedByteArray = cert.duplicate()
+	padded.resize(Invite.MAX_CERT + 1)
+	check(back != null and back.matches(cert) and Invite.certificate_from(cert) != null, "the invite recognises the host's certificate (%d bytes), which loads" % cert.size())
+	check(back != null and not back.matches(_cert_der()) and not back.matches(flipped) and not back.matches(padded) and not back.matches(PackedByteArray())
+		and not back.matches(crypto.generate_random_bytes(cert.size())),
+		"another certificate, one changed bit, oversized, empty and random bytes are not recognised")
 	var bad: Dictionary = {
-		"empty": "", "not ours": "hello", "truncated": text.substr(0, text.length() - 120), "half": text.substr(0, 60),
-		"stray characters": text.substr(0, 50) + "!@#" + text.substr(53), "oversized": text + "A".repeat(2100),
-		"wrong prefix": "AF2." + text.substr(4),
+		"empty": "", "not ours": "hello", "truncated": text.substr(0, text.length() - 30), "half": text.substr(0, 30),
+		"stray characters": text.substr(0, 20) + "!@#" + text.substr(23), "oversized": text + "A".repeat(500),
+		"wrong prefix": "AF3." + text.substr(4), "previous format": "AF1." + text.substr(4),
 	}
 	var error: Array = []
 	var all_refused: bool = true
@@ -83,14 +102,16 @@ func _test_invite() -> void:
 		if not refused:
 			print("       accepted a bad invite: ", name)
 	check(all_refused, "damaged, truncated, oversized and foreign invites are refused with a message")
+	Invite.decode("AF1." + text.substr(4), error)
+	check(String(error[0]).contains("older version"), "an invite in the previous, long format says it is from an older version")
 	# What chat and mail programs do to long text is undone; lost characters are counted.
 	var wrapped: String = ""
-	for i in range(0, text.length(), 76):
-		wrapped += text.substr(i, 76) + "\r\n "
+	for i in range(0, text.length(), 20):
+		wrapped += text.substr(i, 20) + "\r\n "
 	check(Invite.decode("\u200b" + wrapped) != null, "line breaks, spaces and invisible characters inside a pasted invite are ignored")
-	Invite.decode(text.substr(0, text.length() - 83), error)
-	check(String(error[0]).contains("%d of its %d characters" % [text.length() - 83, text.length()]), "a copy that lost its end says how much arrived (%s)" % error[0])
-	Invite.decode(text.substr(0, 700) + text.substr(701), error)
+	Invite.decode(text.substr(0, text.length() - 13), error)
+	check(String(error[0]).contains("%d of its %d characters" % [text.length() - 13, text.length()]), "a copy that lost its end says how much arrived (%s)" % error[0])
+	Invite.decode(text.substr(0, 30) + text.substr(31), error)
 	check(String(error[0]).contains("%d of its %d" % [text.length() - 1, text.length()]), "one character lost in the middle is reported as a short invite")
 	Invite.decode(text + "QQQQ", error)
 	check(String(error[0]).contains("too many"), "extra characters at the end are reported")
@@ -103,19 +124,28 @@ func _test_invite() -> void:
 		Invite.decode(text + "Q".repeat(extra), error)
 		counted = counted and String(error[0]).contains("%d characters too many" % extra)
 	check(counted, "1 to 8 characters lost or added at the end are each counted")
-	# Field-level damage inside otherwise valid base64.
-	var raw: PackedByteArray = _raw(text)
-	var versions: PackedByteArray = raw.duplicate()
+	# A character that arrived as another one: the check at the end catches it.
+	var caught: bool = true
+	for i in range(Invite.PREFIX.length(), text.length()):
+		var other: String = Invite.BASE64URL_CHARS[(Invite.BASE64URL_CHARS.find(text[i]) + 32) % 64]
+		caught = caught and Invite.decode(text.substr(0, i) + other + text.substr(i + 1)) == null
+	check(caught, "one changed character anywhere in an invite is refused")
+	Invite.decode(text.substr(0, 40) + ("A" if text[40] != "A" else "B") + text.substr(41), error)
+	check(String(error[0]).contains("mistake"), "and it says the invite has a mistake in it")
+	# Fields that are wrong in an invite whose check is right.
+	var versions: PackedByteArray = _raw(text)
 	versions[0] = 9
-	var address_chars: PackedByteArray = raw.duplicate()
-	address_chars[3 + 16 + 1] = 0x20
-	var cert_len: PackedByteArray = raw.duplicate()
-	cert_len[raw.size() - inv.certificate_der.size() + 3] ^= 0x01
-	var no_port: PackedByteArray = raw.duplicate()
-	no_port[1] = 0
-	no_port[2] = 0
-	check(Invite.decode(_text(versions)) == null and Invite.decode(_text(address_chars)) == null and Invite.decode(_text(cert_len)) == null
-		and Invite.decode(_text(no_port)) == null, "wrong version, bad address, damaged certificate and port 0 are refused")
+	var spaced: Invite = Invite.new()
+	spaced.address = "bad host"
+	spaced.port = 24555
+	spaced.secret = inv.secret
+	spaced.certificate_hash = inv.certificate_hash
+	var no_port: Invite = Invite.new()
+	no_port.address = inv.address
+	no_port.secret = inv.secret
+	no_port.certificate_hash = inv.certificate_hash
+	check(Invite.decode(_text(versions)) == null and Invite.decode(spaced.encode()) == null and Invite.decode(no_port.encode()) == null,
+		"wrong version, bad address and port 0 are refused")
 
 
 func _raw(text: String) -> PackedByteArray:
@@ -518,7 +548,8 @@ func _host(port: int) -> NetSession:
 	var err: Error = h.host(port, "Host", Airframes.Id.MUSTANG, "alpine")
 	h.set_address("127.0.0.1")
 	if err != OK:
-		print("       host failed: ", h.status)
+		# (the test that asked for it stops with an error; without this the suite would still pass)
+		check(false, "the test host can listen on port %d (%s)" % [port, h.status])
 	return h
 
 
@@ -577,25 +608,143 @@ func _test_connect_and_talk() -> void:
 	probe.close()
 
 
-func _other_cert_invite(real: Invite) -> Invite:
-	var fake: Invite = Invite.new()
-	fake.address = real.address
-	fake.port = real.port
-	fake.secret = real.secret
-	fake.certificate_der = _cert_der()
-	return fake
-
-
+## The host is real but is not the one the invite names (its hash is another
+## certificate's): the joiner stops after the fetch, having sent no secret.
 func _test_wrong_certificate() -> void:
 	var host: NetSession = _host(PORT + 1)
-	var real: Invite = Invite.decode(host.invite_text())
-	var auth_seen: Array = []
-	host.mp.peer_authenticating.connect(func(id: int) -> void: auth_seen.append(id))
-	var client: NetSession = _client(_other_cert_invite(real))
+	var wrong: Invite = Invite.decode(host.invite_text())
+	wrong.certificate_hash = Invite.hash_of(_cert_der())
+	var sent: Array = []
+	host.mp.auth_callback = func(id: int, data: PackedByteArray) -> void:
+		sent.append(data)
+		host._on_auth_data(id, data)
+	var client: NetSession = _client(wrong)
+	var reason: Array = []
+	client.ended.connect(func(r: String) -> void: reason.append(r))
 	_pump([host, client], 4.0, func() -> bool: return _ended(client))
-	check(_ended(client), "a joiner expecting a different certificate refuses the host")
-	check(auth_seen.is_empty() and host.failures_from("127.0.0.1") == 0 and host.players.size() == 1,
-		"it gives up during the handshake, before any secret is sent")
+	_pump([host], 0.3)
+	check(_ended(client) and not reason.is_empty() and String(reason[0]).contains("not the one this invite is for"),
+		"a joiner whose invite names another certificate refuses the host (%s)" % str(reason))
+	check(sent == [PackedByteArray([NetSession.CERT_REQUEST])] and host.failures_from("127.0.0.1") == 0 and host.players.size() == 1,
+		"it had sent only the certificate request, never the secret")
+	host.close()
+
+
+## Someone answering at the invite's address who is not the host: their own key
+## for the encryption, and `answer` when asked for the certificate. Returns
+## [the joiner gave up, its reason, everything the impostor was sent].
+func _lured(port: int, invite: Invite, key: CryptoKey, cert: X509Certificate, answer: PackedByteArray) -> Array:
+	var server: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	server.create_server(port, 4)
+	server.host.dtls_server_setup(TLSOptions.server(key, cert))
+	var mp: SceneMultiplayer = SceneMultiplayer.new()
+	mp.root_path = NodePath("/root")
+	var received: Array = []
+	mp.auth_callback = func(id: int, data: PackedByteArray) -> void:
+		received.append(data)
+		if data.size() == 1:
+			mp.send_auth(id, answer)
+		else:
+			mp.complete_auth(id)   # anything else would be let in
+	mp.multiplayer_peer = server
+	var lure: Invite = Invite.decode(invite.encode())
+	lure.port = port
+	var client: NetSession = _client(lure)
+	var reason: Array = []
+	client.ended.connect(func(r: String) -> void: reason.append(r))
+	var end: int = Time.get_ticks_msec() + 8000
+	while Time.get_ticks_msec() < end and not _ended(client):
+		mp.poll()
+		if client.mp != null and client.mp.multiplayer_peer != null:
+			client._physics_process(0.016)
+		OS.delay_msec(4)
+	for i in range(40):   # anything still on its way
+		mp.poll()
+		OS.delay_msec(4)
+	var gave_up: bool = _ended(client)
+	if not gave_up:
+		client.close()
+	mp.multiplayer_peer = null
+	server.close()
+	return [gave_up, String(reason[0]) if not reason.is_empty() else "", received]
+
+
+## An attacker in the network path answers instead of the host. Whatever it
+## sends as "the certificate", the joiner gives up and the secret never leaves.
+func _test_impostor_host() -> void:
+	var real_cert: PackedByteArray = _cert_der()
+	var invite: Invite = Invite.new()
+	invite.address = "127.0.0.1"
+	invite.port = PORT + 20
+	invite.secret = crypto.generate_random_bytes(16)
+	invite.certificate_hash = Invite.hash_of(real_cert)
+	var key: CryptoKey = crypto.generate_rsa(2048)
+	var cert: X509Certificate = crypto.generate_self_signed_certificate(key, "CN=airflight-host,O=Airflight,C=XX")
+	var only_requests: Callable = func(received: Array) -> bool:
+		return not received.is_empty() and received.all(func(d: PackedByteArray) -> bool: return d == PackedByteArray([NetSession.CERT_REQUEST]))
+	var own: Array = _lured(PORT + 20, invite, key, cert, Invite.pem_to_der(cert.save_to_string()))
+	check(own[0] and String(own[1]).contains("not the one this invite is for") and only_requests.call(own[2]),
+		"an impostor that sends its own certificate is refused, and gets no secret")
+	var junk: Array = _lured(PORT + 21, invite, key, cert, crypto.generate_random_bytes(5000))
+	var tiny: Array = _lured(PORT + 22, invite, key, cert, PackedByteArray([0x30, 0x82, 0x00]))
+	check(junk[0] and tiny[0] and String(junk[1]).contains("not the one") and String(tiny[1]).contains("not the one")
+		and only_requests.call(junk[2]) and only_requests.call(tiny[2]),
+		"oversized and truncated answers are refused unparsed, and get no secret")
+	# It relays the real host's certificate, which is public, but holds only its own key.
+	var relayed: Array = _lured(PORT + 23, invite, key, cert, real_cert)
+	check(relayed[0] and only_requests.call(relayed[2]),
+		"an impostor that relays the real certificate fails the second handshake, and gets no secret (%s)" % relayed[1])
+
+
+## One certificate request on an unverified connection, as a stranger without
+## the invite could make. Returns what came back (empty if it was turned away).
+func _fetch_only(host: NetSession, port: int) -> PackedByteArray:
+	var visitor: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	visitor.create_client("127.0.0.1", port)
+	visitor.host.dtls_client_setup(NetSession.CERT_NAME, TLSOptions.client_unsafe())
+	var mp: SceneMultiplayer = SceneMultiplayer.new()
+	mp.root_path = NodePath("/root")
+	var got: Array = []
+	var over: Array = []
+	mp.auth_callback = func(_id: int, data: PackedByteArray) -> void: got.append(data)
+	mp.peer_authenticating.connect(func(id: int) -> void: mp.send_auth(id, PackedByteArray([NetSession.CERT_REQUEST])))
+	mp.peer_authentication_failed.connect(func(_id: int) -> void: over.append(1))
+	mp.server_disconnected.connect(func() -> void: over.append(2))
+	mp.connection_failed.connect(func() -> void: over.append(3))
+	mp.multiplayer_peer = visitor
+	var end: int = Time.get_ticks_msec() + 4000
+	while Time.get_ticks_msec() < end and got.is_empty() and over.is_empty():
+		host._physics_process(0.016)
+		mp.poll()
+		OS.delay_msec(4)
+	mp.multiplayer_peer = null
+	visitor.close()
+	_pump([host], 0.05)
+	return got[0] if not got.is_empty() else PackedByteArray()
+
+
+func _test_fetch_limit() -> void:
+	var host: NetSession = _host(PORT + 9)
+	var real: Invite = Invite.decode(host.invite_text())
+	var connected: Array = []
+	host.mp.peer_connected.connect(func(id: int) -> void: connected.append(id))
+	var served: int = 0
+	for i in range(NetSession.FETCH_LIMIT):
+		served += int(real.matches(_fetch_only(host, real.port)))
+	check(served == NetSession.FETCH_LIMIT and connected.is_empty() and host.players.size() == 1 and host.failures_from("127.0.0.1") == 0,
+		"anyone may fetch the certificate; that neither lets them in nor counts as a failed attempt")
+	check(not host.is_blocked("127.0.0.1") and _fetch_only(host, real.port).is_empty() and host.is_blocked("127.0.0.1"),
+		"more than %d fetches from one address without a join block it" % NetSession.FETCH_LIMIT)
+	host._clock += NetSession.BLOCK_SECONDS + 1.0
+	# People who do join leave nothing counted, however often they come back.
+	var stayed_clear: bool = true
+	for i in range(3):
+		var guest: NetSession = _client(real)
+		stayed_clear = _pump([host, guest], 6.0, func() -> bool: return host.players.size() == 2) and stayed_clear
+		stayed_clear = stayed_clear and host.fetches_from("127.0.0.1") == 0
+		guest.close()
+		_pump([host], 4.0, func() -> bool: return host.players.size() == 1)
+	check(stayed_clear, "a join takes its own fetch back, so returning players are never blocked")
 	host.close()
 
 
@@ -614,7 +763,7 @@ func _test_wrong_and_missing_secret() -> void:
 	# A client that completes DTLS but never sends a secret.
 	var silent: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
 	silent.create_client("127.0.0.1", real.port)
-	silent.host.dtls_client_setup(NetSession.CERT_NAME, TLSOptions.client(real.certificate()))
+	silent.host.dtls_client_setup(NetSession.CERT_NAME, TLSOptions.client(host._cert))
 	var mp: SceneMultiplayer = SceneMultiplayer.new()
 	mp.auth_callback = func(_id: int, _d: PackedByteArray) -> void: pass
 	mp.multiplayer_peer = silent

@@ -24,10 +24,14 @@ Corrections:
    check who is joining. The invite secret, checked straight after the handshake,
    is what keeps strangers out. That check has to be the first thing that happens
    and nothing else may run before it passes.
-2. **A short fingerprint is not possible.** Godot has no way to read the
-   certificate a host presented, so there is nothing to compare a fingerprint
-   against. The invite must carry the host's whole certificate. That makes it
-   about 1,100 characters, so it is copied and pasted with buttons, never typed.
+2. **A fingerprint needs two connections.** Godot has no way to read the
+   certificate a host presented, so one connection cannot compare it with a
+   fingerprint. Until 2026-11-14 the invite therefore carried the host's whole
+   certificate and was about 1,100 characters long. Since then the invite
+   carries a 16-byte hash of the certificate: the joiner first fetches the
+   certificate on a connection it does not trust, checks it against the hash,
+   and reconnects trusting exactly that certificate. The invite is about 70
+   characters. See [The invite](#the-invite) for the reasoning.
 3. **Challenge-response is not needed.** Once the joiner has verified the host's
    certificate, the tunnel is private and ends at the real host, so the secret can
    be sent through it directly. This removes a protocol step without losing
@@ -68,29 +72,38 @@ people invited.
    shows an invite with a **Copy** button.
 2. The host sends the invite to friends over a private chat.
 3. A friend presses **Join match**, then **Paste**. Their game reads the address,
-   secret and certificate out of the invite.
-4. Their game opens a DTLS connection to the address and accepts it only if the
-   host presents exactly the certificate from the invite. A fake or intercepting
-   host fails here, before any secret is sent.
-5. Their game sends the secret through the encrypted connection.
-6. The host compares it. Wrong or missing: the connection is dropped and the
+   secret and certificate hash out of the invite.
+4. **Fetch.** Their game opens a DTLS connection to the address without checking
+   who answered, sends one byte asking for the certificate and nothing else. The
+   host answers with its certificate. The joiner accepts those bytes only if
+   their size is in range and their hash equals the one in the invite, and
+   parses them only after that. No match ends the join; there is no fallback.
+5. **Join.** Their game closes that connection and opens a second one that
+   succeeds only if the other end holds the private key of exactly that
+   certificate. A fake or intercepting host fails at step 4 or here, before any
+   secret is sent.
+6. Their game sends the secret through the second connection.
+7. The host compares it. Wrong or missing: the connection is dropped and the
    address is counted as a failed attempt. Right: the player appears in the lobby.
-7. The host starts the match from the lobby and can kick anyone listed.
+8. The host starts the match from the lobby and can kick anyone listed.
 
 When hosting stops, the game stops listening. A forwarded port then leads to
 nothing.
 
 ## The invite
 
-One text string: the prefix `AF1.` followed by URL-safe base64 of these fields.
+One text string: the prefix `AF2.` followed by URL-safe base64 of these fields.
+An invite to an IPv4 address is 67 to 76 characters.
 
 | Field | Size | Notes |
 |---|---|---|
 | Format version | 1 byte | Reject unknown versions with a clear message |
+| Address length | 1 byte | Says how long the whole invite must be, so lost or added characters can be counted |
 | Port | 2 bytes | Default 24555 |
+| Host address | text | IPv4, IPv6 or a DNS name |
 | Secret | 16 bytes | From `Crypto.generate_random_bytes` |
-| Host address | 1 length byte + text | IPv4, IPv6 or a DNS name |
-| Certificate | rest, about 800 bytes | The host's certificate in DER form |
+| Certificate hash | 16 bytes | First 16 bytes of the SHA-256 of the host's certificate (DER) |
+| Check | 3 bytes | First 3 bytes of the SHA-256 of everything before it. Catches copying mistakes only; it is not a security feature |
 
 Rules:
 
@@ -98,9 +111,39 @@ Rules:
   saved to disk, so there is no key file to steal and an old invite is useless.
 - **New invite** in the lobby replaces the secret without disconnecting anyone
   already in.
-- The decoder is strict: maximum 2,048 characters, exact field lengths, anything
-  else is rejected. It never passes unchecked input to the certificate loader.
+- The decoder is strict: maximum 400 characters, exact field lengths, a correct
+  check, anything else is rejected with a message. An `AF1.` invite is refused
+  as coming from an older version.
 - The invite is a password. The UI says so next to the Copy button.
+
+### Why a hash is as safe as the whole certificate (decided 2026-11-14)
+
+**Question:** can the invite be short without weakening the protection?
+**Decision:** carry a 128-bit hash of the certificate and fetch the certificate
+from the host. **Why:**
+
+- The hash travels inside the invite, through the private chat, exactly as the
+  whole certificate did. An attacker on the network path can replace the
+  certificate the host sends but not the hash the joiner already holds, so a
+  replaced certificate is refused. To pass, the attacker would need a
+  certificate of their own with the same hash: a second-preimage attack on
+  SHA-256 at 128 bits. Collision attacks do not apply, because the attacker
+  does not choose the host's certificate.
+- An attacker who relays the real certificate passes the hash check and then
+  fails the second handshake, because they do not hold its private key.
+- Both designs fail the same way if the attacker can alter the invite itself.
+- The certificate is public: DTLS shows it to anyone who connects. Handing it
+  out gives a stranger nothing new.
+- An invited friend still cannot pose as the host to another friend. A version
+  that signed the certificate with the invite secret (about 50 characters) was
+  rejected because it would allow that.
+
+What the joiner must get right, each with a test: the hash is taken over the
+raw bytes and compared before they are parsed; a mismatch ends the join; the
+secret is sent only on the second connection.
+
+Costs: one extra handshake per join (well under a second on loopback), and
+`AF1.` and `AF2.` games cannot join each other.
 
 ## Transport and encryption
 
@@ -117,7 +160,16 @@ peer.create_server(port, seats + 2)    # two spare slots for joiners being check
 peer.host.dtls_server_setup(TLSOptions.server(key, cert))
 ```
 
-The joining side, with `cert` rebuilt from the invite:
+The joining side connects twice. The fetch, which trusts nobody:
+
+```gdscript
+var peer := ENetMultiplayerPeer.new()
+peer.create_client(address, port)
+peer.host.dtls_client_setup("airflight-host", TLSOptions.client_unsafe())
+```
+
+Then, with `cert` built from the fetched bytes once their hash matched the
+invite, the join:
 
 ```gdscript
 var peer := ENetMultiplayerPeer.new()
@@ -127,7 +179,9 @@ peer.host.dtls_client_setup("airflight-host", TLSOptions.client(cert))
 
 `TLSOptions.client(cert)` trusts only that one certificate. The name
 `airflight-host` is fixed and must match the certificate, whatever the real
-address is. `TLSOptions.client_unsafe()` is never used anywhere in the game.
+address is. `TLSOptions.client_unsafe()` is used for the fetch connection only,
+in one place (`NetSession._connect_to_host`), and nothing but the one-byte
+certificate request is ever sent over it.
 
 Settings on the `SceneMultiplayer` object, on both sides:
 
@@ -149,14 +203,27 @@ Setting `auth_callback` on `SceneMultiplayer` switches on Godot's pending state.
 pending peer is not announced with `peer_connected` and cannot deliver game
 packets.
 
-- **Joiner:** on `peer_authenticating`, call `send_auth(1, secret)` then
-  `complete_auth(1)`. The host has already been proven by the certificate.
-- **Host:** in `auth_callback`, compare the received bytes to the secret with
-  `Crypto.constant_time_compare`. On a match call `complete_auth(id)`. Otherwise
-  call `disconnect_peer(id)`.
+- **Joiner, fetch connection:** on `peer_authenticating`, call
+  `send_auth(1, [0x43])` and never `complete_auth`. The answer arrives in
+  `auth_callback`; if it matches the invite the session reconnects after the
+  current poll.
+- **Joiner, join connection:** on `peer_authenticating`, call
+  `send_auth(1, secret)` then `complete_auth(1)`. The host has already been
+  proven by the certificate.
+- **Host:** in `auth_callback`, a single byte `0x43` is a certificate request:
+  answer with `send_auth(id, certificate)`. That connection gets nothing more;
+  any further message on it is dropped. Otherwise compare the received bytes
+  to the secret with `Crypto.constant_time_compare`. On a match call
+  `complete_auth(id)`. Otherwise call `disconnect_peer(id)`.
 - **Failed attempts:** five failures from one address and the host drops further
   connections from it for ten minutes. The 128-bit secret already makes guessing
   hopeless; this only limits wasted effort.
+- **Certificate requests** are not failed attempts, because every real join
+  starts with one. They are counted per address on their own: a successful join
+  takes its own request back, and more than ten outstanding requests block the
+  address for the same ten minutes. The certificate is sent only after the DTLS
+  handshake, which includes the cookie exchange, so a forged source address
+  cannot make the host send it to someone else.
 
 After authentication the joiner sends a `hello` packet with the game's protocol
 version, a player name (16 characters at most, cleaned) and the chosen aircraft.
@@ -309,7 +376,11 @@ above.
   it has a root path, so the session points it at an empty node of its own.
   `SceneMultiplayer.disconnect_peer` does not emit `peer_disconnected`, so the
   session does that bookkeeping itself. NUL bytes in received text make the
-  engine log errors, so the decoder refuses them.
+  engine log errors, so the decoder refuses them. Closing or replacing the
+  connection inside `auth_callback` crashes the engine, so the joiner only
+  notes its decision there and acts after `poll()` returns. An unverified
+  DTLS client needs the engine's certificate store, which is loaded after
+  `SceneTree._init`, so tests that join run from `_initialize`.
 
 ### Command line
 
@@ -331,7 +402,8 @@ above.
 Protected:
 
 - Reading or altering traffic: prevented by DTLS.
-- Posing as the host: prevented by the certificate in the invite.
+- Posing as the host: prevented by the certificate hash in the invite and the
+  second handshake, which only the holder of that certificate's key passes.
 - Joining without the invite: prevented by the secret, checked before any game
   code is reachable.
 - Guessing the secret: 128 random bits.
@@ -340,8 +412,8 @@ Protected:
 
 Still exposed while hosting:
 
-- The port is visible. Anyone can complete the encrypted handshake and is dropped
-  at the secret check. Each attempt costs the host a little CPU, and Godot offers
+- The port is visible. Anyone can complete the encrypted handshake and fetch the
+  certificate, and is dropped at the secret check. Each attempt costs the host a little CPU, and Godot offers
   no way to refuse an address before the handshake, so a determined flood can
   disrupt a match. It cannot get in.
 - A bug in Godot's ENet or DTLS code would be reachable by strangers. Keep Godot
@@ -354,8 +426,11 @@ Still exposed while hosting:
 Requirements, each with an automated test in `game/tests/test_net.gd`:
 
 1. A joiner with the right invite connects.
-2. A joiner whose invite holds a different certificate fails before sending the
-   secret.
+2. A joiner whose invite names a different certificate than the host sends
+   stops after the fetch, having sent only the certificate request. The same
+   holds for an impostor's own certificate, oversized, truncated and random
+   answers, and an impostor that relays the real certificate (it fails the
+   second handshake). In none of these cases is the secret sent.
 3. A joiner with a wrong secret, or who sends none, is dropped and never appears
    as a connected peer.
 4. An unencrypted ENet client cannot connect.
@@ -363,6 +438,9 @@ Requirements, each with an automated test in `game/tests/test_net.gd`:
    errors.
 6. Hit claims and state packets that break the host's checks are ignored.
 7. After hosting stops, the port is closed.
+8. Fetching the certificate neither lets anyone in nor counts as a failed
+   attempt; more than ten fetches from one address without a join block it; a
+   join takes its own fetch back.
 8. `allow_object_decoding` is false and no script contains `@rpc`.
 
 ## When nobody can open a port
@@ -374,7 +452,7 @@ month):
 ./Airflight.x86_64 --headless -- --server --address=SERVER_PUBLIC_IP
 ```
 
-It prints `INVITE AF1.…` (and writes it to `--invite-out` if given). It starts a
+It prints `INVITE AF2.…` (and writes it to `--invite-out` if given). It starts a
 match as soon as two players are in and starts a new one six seconds after each
 result. Every player connects out to it, so nobody opens a port and nobody's home
 address is shared. The server skips trees and clouds. It still loads the map,
@@ -425,19 +503,25 @@ certificate.
 | No secret sent | Dropped at the timeout; host never reports a connected peer |
 | Outside client (`openssl s_client -dtls1_2`) | Completes the handshake and sees the certificate, which confirms correction 1 |
 | Key generation | 30 to 80 ms |
-| Certificate size, full invite length | 796 bytes, 1,103 characters |
+| Certificate size, full invite length | 796 bytes, 1,103 characters with the certificate inside (until 2026-11-14), 71 with its hash |
 | Methods on `PacketPeerDTLS` and `ENetPacketPeer` that return the remote certificate | None, which confirms correction 2 |
+| Unverified client (`TLSOptions.client_unsafe()`) fetches the certificate in the authentication phase, then a second client trusting it connects on the same `SceneMultiplayer` (2026-11-14) | Yes, once the engine has loaded its certificate store |
 
 ## Test evidence
 
-All on Godot 4.5.1, Linux, 2026-11-12.
+All on Godot 4.5.1, Linux, 2026-11-12; rerun with the short invite on 2026-11-14.
 
 **`game/tests/test_net.gd`** (headless, about 40 s; also run by
 `tools/build_release.sh`). Every check passes:
 
-- **Invites:** round trip (1,107 characters); DNS names; paste whitespace. It
-  refuses empty, foreign, truncated, oversized, stray-character, wrong-version,
-  bad-address, damaged-certificate and port-0 invites, each with a message.
+- **Invites (short format, 2026-11-14):** round trip (71 characters, at most 76
+  for an IPv4 address); DNS names; paste whitespace, line breaks and invisible
+  characters. It refuses empty, foreign, truncated, oversized, stray-character,
+  wrong-version, previous-format, bad-address and port-0 invites, each with a
+  message; counts 1 to 8 lost or added characters; and refuses one changed
+  character at any position. The hash accepts the host's certificate and
+  refuses another certificate, one changed bit, oversized, empty and random
+  bytes.
 - **Messages:** every type round-trips. Every truncation and any extra byte is
   refused. NaN, absurd speeds, non-unit rotations, bad zones, bad aircraft ids,
   invalid UTF-8 and NUL are refused. Names are cleaned. 4,000 random and damaged
@@ -457,8 +541,11 @@ All on Godot 4.5.1, Linux, 2026-11-12.
   above. The right invite reaches the lobby with name and aircraft, and messages
   flow both ways. A joiner's host-only messages are dropped. Kick removes the
   joiner with a reason. After New invite, the old invite fails. After hosting
-  stops, the port is free. A wrong certificate fails in the handshake, before
-  the secret is sent. A wrong secret, or none before the timeout, is dropped,
+  stops, the port is free. A host that is not the invite's is refused after the
+  fetch, and impostors that answer with their own certificate, junk, or the
+  relayed real certificate never receive the secret. Fetching the certificate
+  alone lets nobody in and is not a failed attempt; the eleventh fetch without
+  a join blocks the address; returning players are never blocked. A wrong secret, or none before the timeout, is dropped,
   never connected, and counted. Five failures block the address, even with the
   right invite, until the block expires. An unencrypted client cannot connect.
   Junk packets never reach the game, and the sender is disconnected. A different

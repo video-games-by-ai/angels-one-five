@@ -3,11 +3,19 @@ extends Node
 ## One hosted or joined network match: transport, encryption, the invite secret
 ## check, the lobby roster and message passing. See docs/multiplayer-design.md.
 ##
-## ENet over DTLS. The joiner trusts only the certificate carried in the invite,
-## so it cannot be fooled by a fake host. The host then holds every new
-## connection in Godot's authentication phase, where it cannot reach game code,
-## until it has sent the invite's secret. Wrong or missing secrets are dropped
-## and repeated failures from one address block it for a while.
+## ENet over DTLS. The invite carries a hash of the host's certificate, not the
+## certificate, so a joiner connects twice:
+##
+## 1. Fetch. It connects without checking who answered, sends one byte asking
+##    for the certificate and nothing else, and accepts the answer only if its
+##    size and hash match the invite. The bytes are parsed after that, not before.
+## 2. Join. It reconnects trusting exactly that certificate, so it cannot be
+##    fooled by a fake host, and only then sends the invite's secret.
+##
+## The host holds every new connection in Godot's authentication phase, where
+## it cannot reach game code, until it has sent the secret. Wrong or missing
+## secrets are dropped and repeated failures from one address block it for a
+## while, as do repeated certificate requests that never lead to a join.
 ##
 ## The session lives under the scene tree root, so it survives the scene reload
 ## a joiner does to load the host's map. `NetSession.current` finds it.
@@ -26,6 +34,8 @@ const CERT_NAME: String = "airflight-host"
 const AUTH_TIMEOUT: float = 5.0
 const HELLO_TIMEOUT: float = 5.0
 const BLOCK_AFTER: int = 5
+const FETCH_LIMIT: int = 10        ## certificate requests from one address without a join; one more blocks it
+const CERT_REQUEST: int = 0x43     ## the one byte a joiner sends on its first, unverified connection
 const BLOCK_SECONDS: float = 600.0
 const BAD_PACKET_LIMIT: int = 25
 const CHAT_KEEP: int = 20          ## chat lines remembered (the chat box shows the newest few)
@@ -55,14 +65,19 @@ var port_mapper: PortMapper
 
 var _key: CryptoKey
 var _cert: X509Certificate
+var _cert_der: PackedByteArray = PackedByteArray()   ## host: what joiners fetch and the invite's hash covers
 var _secret: PackedByteArray = PackedByteArray()
 var _join_invite: Invite
+var _host_cert: X509Certificate       ## joiner: the host's certificate once it matched the invite
+var _rejoin: bool = false             ## joiner: certificate checked, reconnect trusting it after this poll
+var _refusal: String = ""             ## joiner: why the join ends after this poll
 var _crypto: Crypto = Crypto.new()
 var _auth_address: Dictionary = {}    ## peer -> address while authenticating
 var _greeted: Dictionary = {}         ## peer -> true once its HELLO was accepted
 var _hello_deadline: Dictionary = {}  ## peer -> seconds left to send HELLO
 var _bad_packets: Dictionary = {}     ## peer -> count
 var _failures: Dictionary = {}        ## address -> failed attempts
+var _fetches: Dictionary = {}         ## address -> certificate requests not yet followed by a join
 var _blocked: Dictionary = {}         ## address -> unblock time (s)
 var _clock: float = 0.0
 var _close_reason: String = ""
@@ -132,6 +147,7 @@ func host(listen_port: int, player_name: String, frame: int, map: String, is_ded
 	local_frame = frame
 	_key = _crypto.generate_rsa(2048)
 	_cert = _crypto.generate_self_signed_certificate(_key, "CN=%s,O=Airflight,C=XX" % CERT_NAME, "20250101000000", "20450101000000")
+	_cert_der = Invite.pem_to_der(_cert.save_to_string())
 	_secret = _crypto.generate_random_bytes(Invite.SECRET_BYTES)
 	_new_multiplayer()
 	enet = ENetMultiplayerPeer.new()
@@ -164,7 +180,7 @@ func invite_text() -> String:
 	inv.address = address
 	inv.port = port
 	inv.secret = _secret
-	inv.certificate_der = Invite.pem_to_der(_cert.save_to_string())
+	inv.certificate_hash = Invite.hash_of(_cert_der)
 	return inv.encode()
 
 
@@ -222,27 +238,43 @@ func set_in_match(on: bool) -> void:
 func join(invite: Invite, player_name: String, frame: int) -> Error:
 	role = Role.CLIENT
 	_join_invite = invite
+	_host_cert = null
+	_rejoin = false
+	_refusal = ""
 	local_name = NetProtocol.clean_text(player_name, NetProtocol.NAME_MAX)
 	if local_name == "":
 		local_name = "Pilot"
 	local_frame = frame
 	_new_multiplayer()
-	enet = ENetMultiplayerPeer.new()
-	var err: Error = enet.create_client(invite.address, invite.port)
+	var err: Error = _connect_to_host()
 	if err != OK:
-		status = "Could not reach %s." % invite.address
 		role = Role.NONE
 		return err
-	# Trust exactly the host's certificate from the invite, under the fixed name.
-	err = enet.host.dtls_client_setup(CERT_NAME, TLSOptions.client(invite.certificate()))
-	if err != OK:
-		enet.close()
-		status = "Could not start encryption (error %d)." % err
-		role = Role.NONE
-		return err
-	mp.multiplayer_peer = enet
 	status = "Connecting to %s…" % invite.address
 	changed.emit()
+	return OK
+
+
+## Open a connection to the invite's address: the unverified one that fetches
+## the certificate while `_host_cert` is unknown, afterwards the real one that
+## trusts exactly that certificate under the fixed name.
+func _connect_to_host() -> Error:
+	var next: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+	var err: Error = next.create_client(_join_invite.address, _join_invite.port)
+	if err != OK:
+		status = "Could not reach %s." % _join_invite.address
+		return err
+	var options: TLSOptions = TLSOptions.client_unsafe() if _host_cert == null else TLSOptions.client(_host_cert)
+	err = next.host.dtls_client_setup(CERT_NAME, options)
+	if err != OK:
+		next.close()
+		status = "Could not start encryption (error %d)." % err
+		return err
+	var previous: ENetMultiplayerPeer = enet
+	enet = next
+	mp.multiplayer_peer = next   # before closing the old one, so no "disconnected" is reported
+	if previous != null:
+		previous.close()
 	return OK
 
 
@@ -316,6 +348,16 @@ func _physics_process(delta: float) -> void:
 		return
 	_clock += delta
 	mp.poll()
+	# Decided inside the poll, done after it: the connection cannot be replaced
+	# or closed while Godot is still handing out what arrived on it.
+	if _refusal != "" and role == Role.CLIENT:
+		_end_client(_refusal)
+		return
+	if _rejoin and role == Role.CLIENT:
+		_rejoin = false
+		if _connect_to_host() != OK:
+			_end_client(status)
+		return
 	if role == Role.HOST:
 		for peer: int in _chat_allowance:
 			_chat_allowance[peer] = minf(float(_chat_allowance[peer]) + delta / CHAT_REFILL, CHAT_BURST)
@@ -345,7 +387,11 @@ func _send_raw(peer: int, msg: Dictionary) -> void:
 
 func _on_peer_authenticating(peer: int) -> void:
 	if role == Role.CLIENT:
-		# The DTLS handshake already proved this is the invite's host.
+		if _host_cert == null:
+			# Nobody has been verified yet: ask for the certificate, send nothing else.
+			mp.send_auth(1, PackedByteArray([CERT_REQUEST]))
+			return
+		# The DTLS handshake proved this is the host the invite's hash names.
 		mp.send_auth(1, _join_invite.secret)
 		mp.complete_auth(1)
 		return
@@ -356,27 +402,66 @@ func _on_peer_authenticating(peer: int) -> void:
 			return
 		_blocked.erase(where)
 		_failures.erase(where)
+		_fetches.erase(where)
 	_auth_address[peer] = where
 	reached_from_outside = true
 	changed.emit()
 
 
 func _on_auth_data(peer: int, data: PackedByteArray) -> void:
+	if role == Role.CLIENT:
+		_on_certificate(data)
+		return
 	if role != Role.HOST:
 		return
-	if data.size() == _secret.size() and _crypto.constant_time_compare(data, _secret):
+	if not _auth_address.has(peer):
+		_drop(peer)   # it already asked for the certificate; that connection gets nothing more
+	elif data.size() == 1 and data[0] == CERT_REQUEST:
+		_serve_certificate(peer)
+	elif data.size() == _secret.size() and _crypto.constant_time_compare(data, _secret):
+		var where: String = String(_auth_address[peer])
 		_auth_address.erase(peer)
+		_fetches[where] = maxi(int(_fetches.get(where, 0)) - 1, 0)   # this join's own fetch
 		mp.complete_auth(peer)
 	else:
 		_count_failure(peer)
 		_drop(peer)
 
 
+## Host: hand the certificate to a connection that asked for it. It is public
+## (every handshake shows it), so this is no failed attempt; but an address
+## that keeps asking without ever joining is blocked like one that keeps failing.
+func _serve_certificate(peer: int) -> void:
+	var where: String = String(_auth_address[peer])
+	_auth_address.erase(peer)
+	_fetches[where] = int(_fetches.get(where, 0)) + 1
+	if int(_fetches[where]) > FETCH_LIMIT:
+		_blocked[where] = _clock + BLOCK_SECONDS
+		_drop(peer)
+		return
+	mp.send_auth(peer, _cert_der)
+
+
+## Joiner: the answer on the unverified connection. Whoever sent it is unknown,
+## so only its size and hash are looked at before anything else happens. No
+## match ends the join; there is no way to carry on without one.
+func _on_certificate(data: PackedByteArray) -> void:
+	if _host_cert != null or _rejoin or _refusal != "":
+		return
+	var cert: X509Certificate = Invite.certificate_from(data) if _join_invite.matches(data) else null
+	if cert == null:
+		_refusal = "The host that answered is not the one this invite is for. Ask the host for a new invite."
+		return
+	_host_cert = cert
+	_rejoin = true   # reconnect once this poll is over
+
+
 ## A wrong secret, or none before the timeout: count it against the address.
 func _on_auth_failed(peer: int) -> void:
 	if role != Role.HOST:
-		status = "The host did not accept this invite."
-		changed.emit()
+		if not _rejoin and _refusal == "":
+			status = "The host did not accept this invite."
+			changed.emit()
 		return
 	_count_failure(peer)
 
@@ -405,6 +490,11 @@ func _count_failure(peer: int) -> void:
 ## Attempts from one address that have failed so far (for tests and the lobby).
 func failures_from(where: String) -> int:
 	return int(_failures.get(where, 0))
+
+
+## Certificate requests from one address not yet followed by a join.
+func fetches_from(where: String) -> int:
+	return int(_fetches.get(where, 0))
 
 
 func is_blocked(where: String) -> bool:
@@ -457,10 +547,14 @@ func _on_connected_to_server() -> void:
 
 
 func _on_connection_failed() -> void:
+	if _rejoin or _refusal != "":
+		return   # the fetch connection going away; what follows is already decided
 	_end_client("Could not connect. Check the invite, and that the host is hosting with the port open.")
 
 
 func _on_server_disconnected() -> void:
+	if _rejoin or _refusal != "":
+		return
 	_end_client(_close_reason if _close_reason != "" else "The connection to the host was lost.")
 
 
