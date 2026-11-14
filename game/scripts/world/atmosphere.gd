@@ -83,6 +83,8 @@ func apply_quality(profile: Dictionary) -> void:
 	environment.ssao_radius = 2.0
 	environment.ssao_intensity = 1.4
 	environment.glow_enabled = bool(profile.glow)
+	sun.shadow_enabled = bool(profile.get("shadows", true))
+	environment.fog_enabled = bool(profile.get("fog", true))
 
 
 static func _cirrus_texture() -> NoiseTexture2D:

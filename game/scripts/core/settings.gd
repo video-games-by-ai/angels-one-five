@@ -30,8 +30,16 @@ var auto_port: bool = false         ## ask the router to open the port (UPnP); o
 var score_limit: int = 5            ## kills that win an online match
 
 
+## Raise this to make phones take their default graphics quality once more
+## (a quality saved before it was raised came from an older default, not a choice).
+const PHONE_DEFAULTS: int = 1
+
+
 static func load_or_default(path: String = PATH) -> GameSettings:
 	var s: GameSettings = GameSettings.new()
+	var phone: bool = OS.has_feature("mobile")
+	if phone:
+		s.quality = Quality.LOW   # measured on a Pixel 6: High runs at about 20 frames a second
 	var cfg: ConfigFile = ConfigFile.new()
 	if cfg.load(path) == OK:
 		s.mouse_sensitivity = float(cfg.get_value("controls", "mouse_sensitivity", s.mouse_sensitivity))
@@ -41,7 +49,8 @@ static func load_or_default(path: String = PATH) -> GameSettings:
 		s.master_volume = clampf(float(cfg.get_value("audio", "master_volume", s.master_volume)), 0.0, 1.0)
 		s.engine_volume = clampf(float(cfg.get_value("audio", "engine_volume", s.engine_volume)), 0.0, 1.0)
 		s.effects_volume = clampf(float(cfg.get_value("audio", "effects_volume", s.effects_volume)), 0.0, 1.0)
-		s.quality = clampi(int(cfg.get_value("graphics", "quality", s.quality)), 0, 2) as Quality
+		if not phone or int(cfg.get_value("graphics", "phone_defaults", 0)) >= PHONE_DEFAULTS:
+			s.quality = clampi(int(cfg.get_value("graphics", "quality", s.quality)), 0, 2) as Quality
 		s.fullscreen = bool(cfg.get_value("graphics", "fullscreen", s.fullscreen))
 		s.snow_showers = bool(cfg.get_value("game", "snow_showers", s.snow_showers))
 		s.aircraft = clampi(int(cfg.get_value("game", "aircraft", s.aircraft)), 0, 2)
@@ -66,6 +75,7 @@ func save(path: String = PATH) -> void:
 	cfg.set_value("audio", "engine_volume", engine_volume)
 	cfg.set_value("audio", "effects_volume", effects_volume)
 	cfg.set_value("graphics", "quality", quality)
+	cfg.set_value("graphics", "phone_defaults", PHONE_DEFAULTS)
 	cfg.set_value("graphics", "fullscreen", fullscreen)
 	cfg.set_value("game", "aircraft", aircraft)
 	cfg.set_value("game", "snow_showers", snow_showers)
@@ -110,8 +120,29 @@ static func _set_bus(bus_name: StringName, linear: float) -> void:
 	AudioServer.set_bus_volume_db(index, linear_to_db(maxf(linear, 0.0001)))
 
 
-## Rendering budget for each preset. Measured on the documented test machine.
+## Diagnostics (DeviceDiag): values laid over the preset, including the extra
+## switches "shadows", "fog", "no_trees" and "no_clouds".
+static var profile_override: Dictionary = {}
+
+
+## Rendering budget for the chosen preset, within what the renderer can do.
 func profile() -> Dictionary:
+	var p: Dictionary = _preset()
+	if RenderingServer.get_current_rendering_method() == "mobile":
+		# The phone renderer cannot hand shaders the scene depth while MSAA is on,
+		# and the snow showers and clouds read it: with MSAA the showers are drawn
+		# as solid white over everything. So edges are smoothed with FXAA instead.
+		# It also has no SSR or SSAO, and no upscaler better than a plain stretch.
+		p.msaa = Viewport.MSAA_DISABLED
+		p.fxaa = true
+		p.ssr = false
+		p.ssao = false
+		p.render_scale = 1.0
+	return p.merged(profile_override, true)
+
+
+## Measured on the documented test machine.
+func _preset() -> Dictionary:
 	match quality:
 		Quality.LOW:
 			return {"lod_scale": 0.7, "tree_range": 1700.0, "tree_shadows": false, "shadow_distance": 900.0,

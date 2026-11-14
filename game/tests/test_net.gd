@@ -83,6 +83,26 @@ func _test_invite() -> void:
 		if not refused:
 			print("       accepted a bad invite: ", name)
 	check(all_refused, "damaged, truncated, oversized and foreign invites are refused with a message")
+	# What chat and mail programs do to long text is undone; lost characters are counted.
+	var wrapped: String = ""
+	for i in range(0, text.length(), 76):
+		wrapped += text.substr(i, 76) + "\r\n "
+	check(Invite.decode("\u200b" + wrapped) != null, "line breaks, spaces and invisible characters inside a pasted invite are ignored")
+	Invite.decode(text.substr(0, text.length() - 83), error)
+	check(String(error[0]).contains("%d of its %d characters" % [text.length() - 83, text.length()]), "a copy that lost its end says how much arrived (%s)" % error[0])
+	Invite.decode(text.substr(0, 700) + text.substr(701), error)
+	check(String(error[0]).contains("%d of its %d" % [text.length() - 1, text.length()]), "one character lost in the middle is reported as a short invite")
+	Invite.decode(text + "QQQQ", error)
+	check(String(error[0]).contains("too many"), "extra characters at the end are reported")
+	# Whatever the count: every fourth length is one no invite can have.
+	var counted: bool = true
+	for lost in range(1, 9):
+		Invite.decode(text.substr(0, text.length() - lost), error)
+		counted = counted and String(error[0]).contains("%d of its %d characters" % [text.length() - lost, text.length()])
+	for extra in range(1, 9):
+		Invite.decode(text + "Q".repeat(extra), error)
+		counted = counted and String(error[0]).contains("%d characters too many" % extra)
+	check(counted, "1 to 8 characters lost or added at the end are each counted")
 	# Field-level damage inside otherwise valid base64.
 	var raw: PackedByteArray = _raw(text)
 	var versions: PackedByteArray = raw.duplicate()

@@ -115,13 +115,17 @@ damage so beginners last longer.
 
 Download the packages from the
 [latest release](https://github.com/video-games-by-ai/angels-one-five/releases/latest).
-No installer is needed; both need a Vulkan-capable GPU with a current driver.
+No installer is needed on a computer; both desktop builds need a Vulkan-capable
+GPU with a current driver.
 
 **Windows:** unzip `airflight-windows.zip` and double-click `Airflight.exe`.
 It requires 64-bit Windows 10/11. The Windows build is exported and its data
 pack was smoke-tested under Linux, but it **has not yet been run on a Windows PC**.
 
 **Linux:** unpack `airflight-linux.tar.gz` and run `./airflight.x86_64`.
+
+**Android (experimental):** download `airflight-android.apk` on the phone and
+tap it; see [Android](#android-experimental). It needs a 64-bit ARM phone.
 
 **Linux, from a checkout:**
 
@@ -163,6 +167,39 @@ and hull; within 1 km a small orange ring shows where to aim so the rounds meet
 them. Off-screen opponents get an arrow at the screen edge. If you leave the mouse alone, assisted levelling eases the aim back to
 the horizon. The aircraft is lost on contact with the ground, the lake or
 treetops, and respawns after three seconds.
+
+### Android (experimental)
+
+The game builds for Android phones with the "Android" export preset
+(64-bit ARM, Godot's Mobile renderer). Releases carry it as
+`airflight-android.apk`: download it on the phone, tap it and allow the
+install from that app when Android asks.
+
+- **Flying:** the left thumb steers with a stick that appears where it lands;
+  the right thumb has FIRE, BOOST, BRAKE, ZOOM and pause. Tap an aircraft on the
+  selection screen to fly it. Throttle, roll, rudder, rockets and chat have no
+  touch controls yet.
+- **Device test:** the selection screen has a **Device test** button. It flies
+  twelve short autopilot flights, each with one more graphics feature switched
+  off, restarts the game between them and ends with a report. The game also
+  keeps a log on every start. Both are in
+  `Android/data/io.github.video_games_by_ai.airflight/files/Documents/` on the
+  phone, readable from a computer over USB (`game/scripts/core/device_diag.gd`).
+- **Graphics:** phones start on Low quality (a Pixel 6 reaches about 20 frames
+  a second on High). The Mobile renderer never uses MSAA, at any quality: with
+  MSAA it cannot give shaders the scene depth, and the snow showers and clouds
+  were drawn as solid white over everything. FXAA smooths edges instead.
+- **Known problems (Pixel 6):** flickering square artefacts and a crash after
+  about 30 seconds were reported with an early test build; neither has been seen
+  in the game's own log since, and neither is diagnosed. Menus are sized for a
+  monitor and are small on a phone.
+
+Build: install Godot's Android export templates; `tools/build_release.sh`
+then writes `build/airflight-android.apk`. It signs with the key named by
+`GODOT_ANDROID_KEYSTORE_RELEASE_PATH`, `_USER` and `_PASSWORD`, or with Godot's
+debug key on the build machine when they are not set. Android installs an
+update only over a build signed with the same key, so releases have to keep
+coming from one key.
 
 ### Maps
 
@@ -209,7 +246,11 @@ nothing.
    - allow Airflight through your computer's firewall when it asks;
    - press **Detect** (or type your public address or a dynamic DNS name);
    - press **Copy invite** and send it to your friends in a private chat.
-2. **Friends:** choose an aircraft, press **Join match**, **Paste**, **Join**.
+2. **Friends:** choose an aircraft, press **Join match**, then **Paste**. The
+   invite is checked at once: the game shows the host's address, or says what
+   is wrong (for example how many of its characters did not arrive), and
+   **Join** works only for a sound invite. **Clear** empties the field. Line
+   breaks and spaces added by chat or mail programs do not matter.
 3. The host sees who is in (and can **Kick**), and presses **Start match**. After
    the result everyone is back in the lobby; Start match again is the rematch.
 
@@ -275,8 +316,8 @@ Everything is original or freely licensed; nothing is downloaded at build time
 | Spitfire Mk IX, P-51D Mustang, P-47D Thunderbolt (moving prop, ailerons, flaps, elevators, rudder, wings that bend; fictional markings) | `tools/build_aircraft.py` → `source-assets/{spitfire,mustang,thunderbolt}.blend` | `game/assets/models/*.glb` |
 | Conifers | `tools/build_trees.py` → `source-assets/trees.blend` | `game/assets/models/trees.glb` |
 | Three engines (two loops each), three guns (three takes each), gun jam, near miss, hits, explosion, wind (synthesised) | `tools/generate_audio.py` | `game/assets/audio/` |
-| Packages for Linux and Windows | `tools/build_release.sh` | `build/` |
-| GitHub release with both packages | `tools/publish_release.sh` | [Releases](https://github.com/video-games-by-ai/angels-one-five/releases) |
+| Packages for Linux, Windows and Android | `tools/build_release.sh` | `build/` |
+| GitHub release with the three packages | `tools/publish_release.sh` | [Releases](https://github.com/video-games-by-ai/angels-one-five/releases) |
 
 Rebuild steps:
 
@@ -289,9 +330,9 @@ python3 tools/generate_audio.py
 tools/build_release.sh
 ```
 
-To publish a release, bump `config/version` in `game/project.godot`, commit and
-push, then run `tools/publish_release.sh`. It rebuilds both packages from that
-commit, tags it `vX.Y.Z` and uploads them (`--dry-run` builds without publishing).
+To publish a release, bump `config/version` in `game/project.godot` (and the
+versions in `game/export_presets.cfg`), commit and push, then run
+`tools/publish_release.sh`. It rebuilds the packages from that commit, tags it `vX.Y.Z` and uploads them (`--dry-run` builds without publishing).
 
 **Plav & Gusinje is built in layers** (see the top of `tools/generate_plav.py`),
 so each can be refined on its own. `docs/plav_layers.png` shows them side by side.
@@ -368,7 +409,7 @@ engine loop that would clip.
 - `world/`: terrain data and LOD tiles, atmosphere (sky, sun, haze, post), clouds, weather (snow showers), forest, village houses, effects
 - `aircraft/`: aircraft data and balance, flight model (fixed-step, network-ready), aircraft visuals, player audio, autopilot
 - `combat/`: bullets and tracers, combatants (player and AI alike), AI pilot
-- `input/`: `FlightCommand`, the device-independent pilot intent, and the mouse/keyboard source
+- `input/`: `FlightCommand`, the device-independent pilot intent, the mouse/keyboard source and the on-screen touch controls
 - `camera/`: chase camera with boost pull-back and adjustable shake
 - `net/`: online play: invite, message format, session (encryption, secret check, lobby), the host's referee, remote aircraft smoothing, UPnP and address detection
 - `ui/`: aircraft selection, online lobby, HUD with target markers, the see-through airframe damage panel and the opponent's target panel, lens flare, pause menu
@@ -385,7 +426,7 @@ can be added without changing the flight code.
 4. **Multiplayer (built, tested on one machine):** host/join with a pasted invite over one host-opened UDP port, 2 to 4 players free-for-all, host-decided damage and score, smooth remote aircraft, respawn and rematch, UPnP and address help, and a dedicated server mode. Still to do: a match between two homes over the internet. Design: [docs/multiplayer-design.md](docs/multiplayer-design.md).
 5. **Release check:** run natively on Windows, cross-play between Windows and Linux, and a final performance pass.
 
-Phones (Android/iOS) would be a later project. They need touch controls, a lighter graphics tier and the dedicated server for online play.
+Phones: an experimental Android build with touch controls exists (see [Android](#android-experimental)). Still to do: the Pixel 6 rendering faults, a lighter graphics tier, phone-sized menus, and online play from a phone over the internet (a phone has joined a computer's match on the same Wi-Fi; a computer or the dedicated server hosts). iOS is not started.
 
 ## Licence
 

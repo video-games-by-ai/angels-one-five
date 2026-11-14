@@ -14,6 +14,11 @@ extends Node3D
 ##   --clearance=METRES       autopilot height above ground (default 140)
 ##   --benchmark=SECONDS      autopilot + frame-time measurement, then quit
 ##   --benchmark-out=PATH     write benchmark results as JSON
+##   --touch                  show the touch-screen controls on a computer (a touch screen shows them by itself)
+##   --diag                   device test: short flights with one more graphics feature off each time,
+##                            logged to a folder (see DeviceDiag; the "diag" export feature does the same)
+##   --autobench              benchmark Low, Medium and High in turn and show the results on screen
+##                            (a build exported with the "autobench" feature does this by itself: phones have no command line)
 ##   --screenshot=PATH --screenshot-at=SECONDS   save one frame (several times, comma-separated, save PATH-1.png, PATH-2.png, ...)
 ##   --fire                   diagnostics: the autopilot holds the trigger (tracers, gun heat)
 ##   --screenshot-when-firing  after that time, wait for the player's guns before saving
@@ -38,6 +43,7 @@ extends Node3D
 ##   --say=TEXT               send this chat line when the first match starts (tests, demos)
 
 const RESPAWN_DELAY: float = 3.0
+const AUTOBENCH_SECONDS: float = 20.0   ## measured time per graphics quality with --autobench
 const ENEMY_RESPAWN_DELAY: float = 6.0
 const AI_DAMAGE_SCALE: float = 0.5    ## opponents' rounds are softened so beginners last
 const PLAYER_COLOR: int = 0
@@ -50,6 +56,8 @@ enum Mode { HANGAR, FLYING, LOBBY }
 static var session_map: String = ""
 ## A message for the hangar after a reload, e.g. why an online match ended.
 static var pending_notice: String = ""
+## --autobench: one result per graphics quality so far; the scene reloads between them.
+static var autobench_results: Array[Dictionary] = []
 
 var settings: GameSettings
 var terrain: TerrainData
@@ -90,6 +98,10 @@ var hold_fire: bool = false       ## --fire
 var quit_at: float = -1.0
 var benchmark_seconds: float = 0.0
 var benchmark_out: String = ""
+var autobench: bool = false
+var diag: bool = false            ## a DeviceDiag stage is being flown
+var diag_banner: Label
+var touch: TouchControls          ## on-screen flying controls; null without a touch screen
 var frame_times: PackedFloat32Array = PackedFloat32Array()
 var fixed_view: PackedFloat64Array = PackedFloat64Array()
 var forced_zoom: float = 0.0
@@ -126,9 +138,24 @@ var result_text: String = ""
 func _ready() -> void:
 	PlayerInput.register_actions()
 	settings = GameSettings.load_or_default()
+	GameSettings.profile_override = {}
+	if OS.has_feature("android"):
+		DeviceDiag.open_log()   # a phone has no console: keep the log where a computer can read it
+	if DeviceDiag.wanted():
+		var stage: Dictionary = DeviceDiag.begin()   # first of all, so the log covers the whole start
+		if stage.is_empty():
+			_show_diag_report()
+			return
+		diag = true
+		settings.quality = int(stage.quality) as GameSettings.Quality
+		settings.snow_showers = bool(stage.get("snow", true))
+		GameSettings.profile_override = stage.get("profile", {})
 	settings.apply_audio()   # buses exist before any sound is created
 	var use_autopilot: bool = false
-	for arg in OS.get_cmdline_user_args():
+	var launch_args: PackedStringArray = OS.get_cmdline_user_args()
+	if OS.has_feature("autobench"):
+		launch_args.append("--autobench")
+	for arg in launch_args:
 		if arg.begins_with("--quality="):
 			settings.quality = clampi(int(arg.trim_prefix("--quality=")), 0, 2) as GameSettings.Quality
 		elif arg.begins_with("--aircraft="):
@@ -147,6 +174,8 @@ func _ready() -> void:
 			benchmark_seconds = float(arg.trim_prefix("--benchmark="))
 			use_autopilot = true
 			opponent_count = 0
+		elif arg == "--autobench":
+			autobench = true
 		elif arg.begins_with("--benchmark-out="):
 			benchmark_out = arg.trim_prefix("--benchmark-out=")
 		elif arg.begins_with("--screenshot="):
@@ -189,6 +218,14 @@ func _ready() -> void:
 			matches_to_quit = maxi(int(arg.trim_prefix("--quit-after-matches=")), 1)
 		elif arg.begins_with("--say="):
 			cli_say = arg.trim_prefix("--say=")
+	if diag:
+		use_autopilot = true
+		opponent_count = 0
+	if autobench:
+		settings.quality = mini(autobench_results.size(), GameSettings.Quality.HIGH) as GameSettings.Quality
+		benchmark_seconds = AUTOBENCH_SECONDS
+		use_autopilot = true
+		opponent_count = 0
 	if not args_have_value("--port="):
 		net_port = settings.net_port
 	if not args_have_value("--score-limit="):
@@ -201,37 +238,47 @@ func _ready() -> void:
 	var t0: int = Time.get_ticks_msec()
 	if session_map == "":
 		session_map = settings.map
+	DeviceDiag.mark("terrain")
 	terrain = TerrainData.load_map(session_map)
 	Weather.use_map(terrain)
 	var profile: Dictionary = settings.profile()
+	DeviceDiag.mark("atmosphere")
 	atmosphere = Atmosphere.new()
 	add_child(atmosphere)
 	atmosphere.build(terrain.sun_direction, terrain.altitude_offset)
+	DeviceDiag.mark("terrain_renderer")
 	terrain_renderer = TerrainRenderer.new()
 	add_child(terrain_renderer)
 	terrain_renderer.build(terrain, float(profile.lod_scale))
+	DeviceDiag.mark("_build_water")
 	_build_water()
 	var args: PackedStringArray = OS.get_cmdline_user_args()
+	DeviceDiag.mark("forest")
 	forest = Forest.new()
 	add_child(forest)
-	if not args.has("--no-trees") and not server_mode:
+	if not args.has("--no-trees") and not server_mode and not bool(profile.get("no_trees", false)):
 		forest.build(terrain, terrain_renderer.mask_texture, profile)
+	DeviceDiag.mark("village")
 	village = Village.new()
 	add_child(village)
 	village.build(terrain)
+	DeviceDiag.mark("clouds")
 	clouds = CloudField.new()
 	add_child(clouds)
-	if not args.has("--no-clouds") and not server_mode:
+	if not args.has("--no-clouds") and not server_mode and not bool(profile.get("no_clouds", false)):
 		clouds.build(terrain, float(profile.clouds))
+	DeviceDiag.mark("weather")
 	weather = Weather.new()
 	add_child(weather)
 	weather.build(terrain, clouds, settings.snow_showers)
 	weather.register(terrain_renderer.material)
 	weather.register(forest.needle_material)
 	weather.register(clouds.material)
+	DeviceDiag.mark("effects")
 	effects = Effects.new()
 	effects.water_level = terrain.water_level
 	add_child(effects)
+	DeviceDiag.mark("bullets")
 	bullets = BulletField.new()
 	bullets.listening = not server_mode
 	add_child(bullets)
@@ -287,12 +334,22 @@ func _ready() -> void:
 	layer.add_child(hud)
 	if args.has("--no-hud"):
 		hud.process_mode = Node.PROCESS_MODE_DISABLED
+	if TouchControls.wanted():
+		touch = TouchControls.new()
+		touch.visible = false
+		layer.add_child(touch)
+		input.touch = touch
+		touch.zoom_pressed.connect(func() -> void: input.toggle_zoom())
+		touch.pause_pressed.connect(_press_pause)
 	hangar = Hangar.new()
 	layer.add_child(hangar)
 	hangar.build(settings.aircraft, terrain.title)
 	hangar.chosen.connect(_start_flight)
 	hangar.map_requested.connect(_next_map)
 	hangar.settings_requested.connect(_open_settings_from_hangar)
+	hangar.device_test_requested.connect(func() -> void:
+		DeviceDiag.request()
+		_restart())
 	hangar.quit_requested.connect(func() -> void: get_tree().quit())
 	hangar.host_requested.connect(func(id: int) -> void: _host_match(id))
 	hangar.join_requested.connect(_join_screen)
@@ -389,7 +446,7 @@ func _start_flight(id: int, remember: bool = true) -> void:
 	hud.attach(player, opponents)
 	hud.visible = not OS.get_cmdline_user_args().has("--no-hud")
 	if autopilot == null and not ai_player:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_capture_mouse()
 
 
 ## (Re)create a combatant's visual aircraft for its current type.
@@ -443,8 +500,12 @@ func _apply_settings() -> void:
 	var viewport: Viewport = get_viewport()
 	viewport.msaa_3d = profile.msaa
 	viewport.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA if profile.fxaa else Viewport.SCREEN_SPACE_AA_DISABLED
-	viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if float(profile.render_scale) < 1.0 else Viewport.SCALING_3D_MODE_BILINEAR
+	# FSR exists only in the desktop renderer; the phone renderer upscales plainly.
+	var fsr: bool = float(profile.render_scale) < 1.0 and RenderingServer.get_current_rendering_method() == "forward_plus"
+	viewport.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if fsr else Viewport.SCALING_3D_MODE_BILINEAR
 	viewport.scaling_3d_scale = float(profile.render_scale)
+	DeviceDiag.mark("settings: %s quality, %s, msaa %d, fxaa %s, scale %.2f, snow %s" % [GameSettings.QUALITY_NAMES[settings.quality],
+		RenderingServer.get_current_rendering_method(), int(profile.msaa), profile.fxaa, float(profile.render_scale), settings.snow_showers])
 	settings.apply_audio()
 	var mode: DisplayServer.WindowMode = DisplayServer.WINDOW_MODE_FULLSCREEN if settings.fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 	if DisplayServer.window_get_mode() != mode and benchmark_seconds <= 0.0:
@@ -526,7 +587,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		settings.save()
 		_apply_settings()
 	elif event is InputEventMouseButton and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED and not get_tree().paused and _player_flies():
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_capture_mouse()
 
 
 ## The pause menu is created on first use. Its quality dropdown owns a hidden
@@ -561,7 +622,22 @@ func _resume() -> void:
 		return
 	get_tree().paused = false
 	if _player_flies():
+		_capture_mouse()
+
+
+## Hold the mouse for flying. A touch screen has no pointer to hold, and holding
+## it would turn every touch into mouse steering on top of the stick.
+func _capture_mouse() -> void:
+	if touch == null:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## The touch pause button does what Esc does.
+func _press_pause() -> void:
+	var press: InputEventAction = InputEventAction.new()
+	press.action = "pause"
+	press.pressed = true
+	Input.parse_input_event(press)
 
 
 ## True when a human is at the controls of a sortie in progress.
@@ -675,6 +751,14 @@ func _destroyed(c: Combatant, by: Combatant) -> void:
 
 func _process(delta: float) -> void:
 	elapsed += delta
+	if touch != null:
+		# (--touch also shows them over an autopilot flight, for pictures of the layout)
+		var flying: bool = _player_flies() or (mode == Mode.FLYING and OS.get_cmdline_user_args().has("--touch"))
+		touch.visible = flying and model != null and model.alive and not get_tree().paused
+	if diag:
+		_diag_tick(delta)
+	else:
+		DeviceDiag.heartbeat(delta, "flying" if mode == Mode.FLYING else "menu")
 	_online_tick(delta)
 	_update_chat()
 	if mode == Mode.FLYING and player != null:
@@ -759,11 +843,129 @@ func _benchmark_tick(delta: float) -> void:
 		"cpu": OS.get_processor_name(), "godot": Engine.get_version_info().string,
 	}
 	print("BENCHMARK ", JSON.stringify(result))
+	if autobench:
+		benchmark_seconds = 0.0
+		autobench_results.append(result)
+		if autobench_results.size() <= GameSettings.Quality.HIGH:
+			get_tree().reload_current_scene.call_deferred()
+		else:
+			_show_autobench()
+		return
 	if benchmark_out != "":
 		var f: FileAccess = FileAccess.open(benchmark_out, FileAccess.WRITE)
 		f.store_string(JSON.stringify(result, "  "))
 	benchmark_seconds = 0.0
 	get_tree().quit()
+
+
+## One frame of a DeviceDiag stage: keep the banner up and, when the stage is
+## over, restart the game for the next one (or reload the scene, or report).
+func _diag_tick(delta: float) -> void:
+	if diag_banner == null:
+		diag_banner = _overlay_label(DeviceDiag.banner(), Control.PRESET_TOP_WIDE, 0.0)
+		diag_banner.position.y = 90.0
+	if not DeviceDiag.tick(delta, get_viewport()):
+		return
+	diag = false
+	var following: Dictionary = DeviceDiag.finish_stage()
+	if following.is_empty():
+		diag_banner.queue_free()
+		_show_diag_report()
+		get_tree().paused = true
+	elif bool(following.get("reload", false)):
+		get_tree().reload_current_scene.call_deferred()
+	else:
+		_restart()
+
+
+## Quit and start again with the same options (the next device-test stage).
+func _restart() -> void:
+	var again: PackedStringArray = OS.get_cmdline_args()
+	if not OS.get_cmdline_user_args().is_empty() and not again.has("--"):
+		again.append("--")
+		again.append_array(OS.get_cmdline_user_args())
+	OS.set_restart_on_exit(true, again)
+	get_tree().quit()
+
+
+## The device test is over (or was already over when the game started).
+func _show_diag_report() -> void:
+	_overlay_label(DeviceDiag.report(), Control.PRESET_FULL_RECT, 0.85)
+	AudioServer.set_bus_mute(0, true)
+	if terrain == null:   # nothing was built: this node has nothing to run
+		set_process(false)
+		set_physics_process(false)
+		set_process_input(false)
+		set_process_unhandled_input(false)
+
+
+## Large centred text above everything, on a dark shade of the given strength.
+func _overlay_label(text: String, preset: Control.LayoutPreset, shade_alpha: float) -> Label:
+	var layer: CanvasLayer = CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	if shade_alpha > 0.0:
+		var shade: ColorRect = ColorRect.new()
+		shade.color = Color(0.0, 0.0, 0.0, shade_alpha)
+		shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+		layer.add_child(shade)
+	var label: Label = Label.new()
+	label.text = text
+	label.add_theme_font_size_override("font_size", 40)
+	label.add_theme_color_override("font_outline_color", Color.BLACK)
+	label.add_theme_constant_override("outline_size", 10)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_preset(preset)
+	layer.add_child(label)
+	return label
+
+
+## --autobench is over: stop the game and leave the three results on screen. They
+## are also saved as JSON in the game's data folder and its documents folder.
+func _show_autobench() -> void:
+	var window: Vector2i = DisplayServer.window_get_size()
+	var lines: PackedStringArray = PackedStringArray(["AIRFLIGHT BENCHMARK", ""])
+	for r in autobench_results:
+		lines.append("%s:  %.1f fps average  ·  %.1f fps 1%% low  ·  worst frame %.0f ms" % [
+			String(r.quality).to_upper(), float(r.avg_fps), float(r.one_percent_low_fps), float(r.worst_ms)])
+	var device: Dictionary = {
+		"model": OS.get_model_name(), "gpu": RenderingServer.get_video_adapter_name(), "cpu": OS.get_processor_name(),
+		"window": "%dx%d" % [window.x, window.y], "refresh_hz": snappedf(DisplayServer.screen_get_refresh_rate(), 0.1),
+		"renderer": RenderingServer.get_current_rendering_method(),
+	}
+	lines.append("")
+	lines.append("%s  ·  %s" % [device.model, device.gpu])
+	lines.append("%s  ·  %s Hz screen  ·  %s renderer" % [device.window, device.refresh_hz, device.renderer])
+	var layer: CanvasLayer = CanvasLayer.new()
+	layer.layer = 100
+	add_child(layer)
+	var shade: ColorRect = ColorRect.new()
+	shade.color = Color(0.0, 0.0, 0.0, 0.82)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(shade)
+	var label: Label = Label.new()
+	label.text = "\n".join(lines)
+	label.add_theme_font_size_override("font_size", 44)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(label)
+	var json: String = JSON.stringify({"device": device, "results": autobench_results}, "  ")
+	# On a phone the documents folder is the game's own, which a computer can read over USB.
+	var dirs: PackedStringArray = PackedStringArray(["user://"])
+	if OS.has_feature("android"):
+		dirs.append(OS.get_system_dir(OS.SYSTEM_DIR_DOCUMENTS, false))
+	for dir in dirs:
+		var f: FileAccess = FileAccess.open(dir.path_join("airflight_benchmark.json"), FileAccess.WRITE)
+		if f != null:
+			f.store_string(json)
+	AudioServer.set_bus_mute(0, true)
+	get_tree().paused = true
+	if screenshot_path != "":   # tests: keep a picture of the panel and leave
+		await RenderingServer.frame_post_draw
+		get_viewport().get_texture().get_image().save_png(screenshot_path)
+		get_tree().quit()
 
 
 # --- Online play ---------------------------------------------------------------
@@ -889,6 +1091,8 @@ func _on_pause_leave() -> void:
 func _on_session_ended(reason: String) -> void:
 	net = null
 	online = false
+	if not is_inside_tree():
+		return   # the game is closing: the session ends after this scene has left the tree
 	if world_dirty:
 		mode = Mode.LOBBY   # the offline loop must never run the online aircraft
 	referee = null
@@ -1027,7 +1231,7 @@ func _apply_match_start(msg: Dictionary) -> void:
 	hud.mode_label = "ONLINE MATCH · FIRST TO %d KILLS" % score_limit
 	hud.visible = not OS.get_cmdline_user_args().has("--no-hud")
 	if _player_flies():
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_capture_mouse()
 	print("NET: match started, %d players, first to %d" % [combatants.size(), score_limit])
 
 

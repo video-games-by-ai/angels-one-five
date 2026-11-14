@@ -1,13 +1,14 @@
 class_name PlayerInput
 extends Node
 ## Mouse and keyboard pilot. The mouse swings a free aim direction around the
-## camera; the aircraft flies toward it. A touch or gamepad scheme would produce
-## the same FlightCommand.
+## camera; the aircraft flies toward it. On a touch screen the on-screen stick
+## and buttons (TouchControls) drive the same aim and the same FlightCommand.
 
 const MOUSE_SCALE: float = 0.0021
 const LEVEL_DELAY: float = 1.1
 const ZOOM_STEP: float = 1.26       ## one wheel notch; three notches double the magnification
 const ZOOM_DEFAULT: float = 3.0     ## where Z zooms to until the wheel has picked a level
+const STICK_RATE: float = 760.0     ## touch stick at full push, in mouse pixels per second (about 90 degrees a second)
 
 var command: FlightCommand = FlightCommand.new()
 var settings: GameSettings
@@ -19,6 +20,7 @@ var zoom_preferred: float = ZOOM_DEFAULT   ## the level Z returns to: the last o
 var max_zoom: float = ZOOM_DEFAULT         ## how far this aircraft's sight zooms
 var aim_scale: float = 1.0        ## mouse sensitivity share; the camera lowers it while zoomed
 var typing: bool = false          ## a chat line is open: keys write text, the mouse still flies
+var touch: TouchControls          ## set on a touch screen; while it is shown it replaces mouse and keys
 var idle_time: float = 0.0
 var arena_radius: float = 8600.0
 var arena_warning: bool = false
@@ -56,8 +58,8 @@ func reset(direction: Vector3) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not enabled or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-		return
+	if not enabled or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED or touch != null:
+		return   # (a touch screen also sends its touches as mouse events; the stick flies there)
 	if event is InputEventMouseMotion:
 		apply_mouse((event as InputEventMouseMotion).relative)
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
@@ -117,6 +119,20 @@ func sample(delta: float, aircraft_position: Vector3, nose: Vector3) -> FlightCo
 		var target: Vector3 = Vector3(home.x, aim_direction.y, home.z).normalized()
 		aim_direction = aim_direction.slerp(target, 1.0 - exp(-delta * push * 1.2)).normalized()
 
+	if touch != null and touch.visible:
+		# The further the stick is pushed, the faster the aim swings; the square
+		# keeps small corrections fine. Zoom and sensitivity apply as to the mouse.
+		if enabled:
+			apply_mouse(touch.stick * touch.stick.length() * STICK_RATE * delta)
+		command.aim_direction = aim_direction
+		command.throttle_axis = 0.0
+		command.roll_axis = 0.0
+		command.yaw_axis = 0.0
+		command.boost = enabled and touch.boost
+		command.brake = enabled and touch.brake
+		command.fire = enabled and touch.fire
+		command.rocket = false
+		return command
 	command.aim_direction = aim_direction
 	var keys: bool = enabled and not typing
 	command.throttle_axis = Input.get_axis("throttle_down", "throttle_up") if keys else 0.0

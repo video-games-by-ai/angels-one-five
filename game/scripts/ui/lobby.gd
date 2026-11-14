@@ -37,6 +37,8 @@ var copy_button: Button
 var new_invite_button: Button
 var join_box: VBoxContainer
 var paste_edit: LineEdit
+var invite_note: Label            ## what the pasted invite is, or what is wrong with it
+var last_invite_note: String = ""
 var join_button: Button
 var status_label: Label
 var players_title: Label
@@ -173,18 +175,31 @@ func build(game_settings: GameSettings) -> void:
 	paste_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	paste_edit.custom_minimum_size = Vector2(0, 40)
 	paste_edit.text_submitted.connect(func(_t: String) -> void: _try_join())
+	paste_edit.text_changed.connect(func(_t: String) -> void: _check_invite())
 	paste_row.add_child(paste_edit)
 	var paste: Button = Button.new()
 	paste.text = "Paste"
 	paste.custom_minimum_size = Vector2(110, 40)
-	paste.pressed.connect(func() -> void: paste_edit.text = DisplayServer.clipboard_get().strip_edges().substr(0, Invite.MAX_TEXT))
+	paste.pressed.connect(func() -> void:
+		# Straight from the clipboard, so no keyboard has a chance to alter it.
+		paste_edit.text = Invite.tidy(DisplayServer.clipboard_get()).substr(0, Invite.MAX_TEXT)
+		_check_invite())
 	paste_row.add_child(paste)
+	var clear: Button = Button.new()
+	clear.text = "Clear"
+	clear.custom_minimum_size = Vector2(110, 40)
+	clear.pressed.connect(func() -> void:
+		paste_edit.text = ""
+		_check_invite())
+	paste_row.add_child(clear)
 	join_button = Button.new()
 	join_button.text = "Join"
 	join_button.custom_minimum_size = Vector2(110, 40)
 	join_button.pressed.connect(_try_join)
 	paste_row.add_child(join_button)
 	join_box.add_child(paste_row)
+	invite_note = _label("", 15, DIM, true)
+	join_box.add_child(invite_note)
 
 	status_label = _label("", 15, AMBER, true)
 	box.add_child(status_label)
@@ -274,7 +289,7 @@ func refresh() -> void:
 	if not live:
 		status_label.text = session.status if session != null and is_instance_valid(session) else ""
 		players_box.visible = false
-		join_button.disabled = false
+		_check_invite()
 		return
 	players_box.visible = true
 	join_button.disabled = true
@@ -352,13 +367,32 @@ func _on_probe(found: String, error: String) -> void:
 	refresh()
 
 
-func _try_join() -> void:
+## Check the pasted invite at once, before any connection is tried: say what it
+## is or what is wrong with it, and allow Join only for a sound one.
+func _check_invite() -> Invite:
 	var error: Array = []
-	var invite: Invite = Invite.decode(paste_edit.text, error)
-	if invite == null:
-		status_label.text = String(error[0]) if not error.is_empty() else "That invite is not valid."
-		return
-	join_requested.emit(invite)
+	var text: String = paste_edit.text
+	var invite: Invite = null if text == "" else Invite.decode(text, error)
+	if text == "":
+		invite_note.text = "Copy the invite where the host sent it, then press Paste."
+		invite_note.add_theme_color_override("font_color", DIM)
+	elif invite == null:
+		invite_note.text = String(error[0]) if not error.is_empty() else "That invite is not valid."
+		invite_note.add_theme_color_override("font_color", WARN)
+	else:
+		invite_note.text = "Invite checked: %s, port %d. Press Join." % [invite.address, invite.port]
+		invite_note.add_theme_color_override("font_color", GOOD)
+	if invite_note.text != last_invite_note:
+		last_invite_note = invite_note.text
+		DeviceDiag.mark("invite check, %d characters: %s" % [Invite.tidy(text).length(), "sound" if invite != null else invite_note.text])
+	join_button.disabled = invite == null
+	return invite
+
+
+func _try_join() -> void:
+	var invite: Invite = _check_invite()
+	if invite != null:
+		join_requested.emit(invite)
 
 
 static func _clean_address(text: String) -> String:

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Publish a GitHub release with the Linux and Windows packages.
+# Publish a GitHub release with the Linux, Windows and Android packages.
 #
 #   tools/publish_release.sh            build, tag vX.Y.Z and publish
 #   tools/publish_release.sh --dry-run  build and package only; publish nothing
 #
 # The version comes from config/version in game/project.godot: bump it there
-# (and file_version/product_version in game/export_presets.cfg) for each
-# release. The release is built from the current commit, so the working tree
+# (and file_version/product_version, and Android's version/name and
+# version/code, in game/export_presets.cfg) for each release. The release is built from the current commit, so the working tree
 # must be clean and the commit must already be on origin/main.
 # Requires the GitHub CLI (gh) and everything tools/build_release.sh needs.
 set -euo pipefail
@@ -19,7 +19,7 @@ VERSION="$(sed -n 's/^config\/version="\(.*\)"$/\1/p' game/project.godot)"
 [ -n "$VERSION" ] || { echo "No config/version in game/project.godot" >&2; exit 1; }
 TAG="v$VERSION"
 SLUG="$(git remote get-url origin | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')"
-ASSETS=(build/airflight-linux.tar.gz build/airflight-windows.zip)
+ASSETS=(build/airflight-linux.tar.gz build/airflight-windows.zip build/airflight-android.apk)
 
 # gh's own login may not be allowed into the organisation; fall back to the
 # credential that git pushes with.

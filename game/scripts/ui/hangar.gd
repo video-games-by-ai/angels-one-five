@@ -11,6 +11,7 @@ signal map_requested
 signal host_requested(id: int)
 signal join_requested(id: int)
 signal settings_requested
+signal device_test_requested
 
 const TEXT: Color = Color("fbf4e6")
 const DIM: Color = Color("e6d8bf")
@@ -101,6 +102,16 @@ func build(initial: int, map_name: String = "") -> void:
 	settings_button.focus_mode = Control.FOCUS_NONE
 	settings_button.pressed.connect(func() -> void: settings_requested.emit())
 	footer.add_child(settings_button)
+	if TouchControls.wanted():
+		# A phone has no console to read: this flies a set of short test flights
+		# and leaves a report (see DeviceDiag).
+		hint.text = "Tap an aircraft to fly it"
+		var test: Button = Button.new()
+		test.text = "Device test"
+		test.custom_minimum_size = Vector2(150, 42)
+		test.focus_mode = Control.FOCUS_NONE
+		test.pressed.connect(func() -> void: device_test_requested.emit())
+		footer.add_child(test)
 	var quit: Button = Button.new()
 	quit.text = "Quit to desktop"
 	quit.custom_minimum_size = Vector2(180, 42)

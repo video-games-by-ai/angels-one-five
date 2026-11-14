@@ -620,7 +620,17 @@ func _draw_hints(s: float) -> void:
 		"ESC  pause & change aircraft",
 		"F4  snow showers on / off (weather test)",
 	]
-	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 376 * s), Vector2(410 * s, 284 * s))
+	if input != null and input.touch != null:
+		lines = [
+			"LEFT THUMB  push the stick the way you want to fly",
+			"FIRE  hold to shoot; aim ahead of a turning target",
+			"Fire in bursts: the guns overheat, then must cool",
+			"BOOST  hold for speed      BRAKE  hold to slow down",
+			"ZOOM  for long shots      II  pause & change aircraft",
+		]
+	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 376 * s), Vector2(410 * s, (24 + lines.size() * 26) * s))
+	if input != null and input.touch != null:
+		rect.position.y = 300 * s   # clear of the steering stick
 	draw_rect(rect, Color(PANEL, PANEL.a * a), true)
 	draw_rect(rect, Color(EDGE, EDGE.a * a), false, 1.0)
 	for i in range(lines.size()):

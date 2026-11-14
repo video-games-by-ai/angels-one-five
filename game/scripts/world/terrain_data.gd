@@ -76,10 +76,14 @@ static func load_map(map_id: String) -> TerrainData:
 			data.path_length += Vector2(point[0] - last.x, point[2] - last.z).length()
 		data.valley_path.append(Vector3(point[0], point[1], point[2]))
 		data.path_marks.append(data.path_length)
+	DeviceDiag.mark("heights")
 	data.heights = FileAccess.get_file_as_bytes(asset_path(data.id, "height.r32")).to_float32_array()
 	assert(data.heights.size() == data.samples * data.samples, "Heightmap size mismatch")
+	DeviceDiag.mark("mask load")
 	var mask: Texture2D = load(asset_path(data.id, "mask.png"))
+	DeviceDiag.mark("mask get_image")
 	data.mask_image = mask.get_image()
+	DeviceDiag.mark("mask done")
 	if data.mask_image.is_compressed():
 		data.mask_image.decompress()
 	return data

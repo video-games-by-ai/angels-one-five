@@ -10,12 +10,15 @@ const GUN_TAKES: int = 3
 const SOUND_SPEED: float = 340.0
 
 
-## A WAV resource set to loop over its whole length.
+## A WAV resource set to loop over its whole length. The loop ends on the last
+## frame, as Godot's own importer sets it: the mixer reads one frame past the loop
+## end to smooth the sound, and with the end set to the frame count that read
+## falls outside the sample. Desktops tolerate it; Android stops the game.
 static func looped(path: String) -> AudioStreamWAV:
 	var stream: AudioStreamWAV = load(path)
 	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	stream.loop_begin = 0
-	stream.loop_end = int(stream.get_length() * stream.mix_rate)
+	stream.loop_end = roundi(stream.get_length() * stream.mix_rate) - 1
 	return stream
 
 
