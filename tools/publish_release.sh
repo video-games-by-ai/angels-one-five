@@ -21,9 +21,11 @@ TAG="v$VERSION"
 SLUG="$(git remote get-url origin | sed -E 's#^(https://github\.com/|git@github\.com:)##; s#\.git$##')"
 ASSETS=(build/airflight-linux.tar.gz build/airflight-windows.zip build/airflight-android.apk)
 
-# gh's own login may not be allowed into the organisation; fall back to the
-# credential that git pushes with.
-if [ -z "${GH_TOKEN:-}" ] && ! gh api "repos/$SLUG" --silent 2>/dev/null; then
+# gh's own login may not be allowed to write to the organisation's repository
+# (it can read it, and then fails to create the release with a misleading
+# "workflow scope may be required"); fall back to the credential that git
+# pushes with.
+if [ -z "${GH_TOKEN:-}" ] && [ "$(gh api "repos/$SLUG" --jq .permissions.push 2>/dev/null)" != "true" ]; then
 	GH_TOKEN="$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill | sed -n 's/^password=//p')"
 	export GH_TOKEN
 fi
