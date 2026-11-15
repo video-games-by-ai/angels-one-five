@@ -56,7 +56,9 @@ var message: String = ""
 var message_time: float = 0.0
 var lost_reason: String = "AIRCRAFT LOST"
 var clock: float = 0.0
-var hint_time: float = 14.0
+var hint_time: float = 14.0       ## the list of commands shows this long at the start of a flight…
+var help_open: bool = false       ## …and stays up while this is set (H)
+var chat_hint: bool = false       ## an online match: the list includes the chat key
 var crash_time: float = 0.0
 var ui_scale: float = 1.0
 var frame_delta: float = 0.0
@@ -86,6 +88,7 @@ func attach(pilot: Combatant, enemies: Array[Combatant]) -> void:
 	aircraft_name = String(model.spec.name)
 	clock = 0.0
 	hint_time = 16.0
+	help_open = false
 	crash_time = 0.0
 	hit_marker = 0.0
 	damage_flash = 0.0
@@ -202,7 +205,7 @@ func _draw() -> void:
 	_draw_airframe(s)
 	_draw_target_panel(s)
 	_draw_warnings(s)
-	if hint_time > 0.0:
+	if hint_time > 0.0 or help_open:
 		_draw_hints(s)
 
 
@@ -602,8 +605,28 @@ func _draw_warnings(s: float) -> void:
 		_text(Vector2(0, y), "LEAVING THE VALLEY — TURN BACK", 17 * s, AMBER, true, HORIZONTAL_ALIGNMENT_CENTER, size.x)
 
 
-func _draw_hints(s: float) -> void:
-	var a: float = clampf(hint_time / 2.0, 0.0, 1.0)
+## H: show the list of commands, or put it away (also while it is still up
+## at the start of a flight).
+func toggle_help() -> void:
+	help_open = not (help_open or hint_time > 0.0)
+	hint_time = 0.0
+
+
+## Every command, for the list shown at the start of a flight and on H.
+func help_lines() -> PackedStringArray:
+	if input != null and input.touch != null:
+		var steer: String = "LEFT THUMB  push the stick the way you want to fly"
+		if input.touch.tilting():
+			steer = "LEAN the phone to turn, tip it back to climb"
+		return [
+			steer,
+			"TILT  steer by leaning the phone, or by stick",
+			"FIRE  hold to shoot; aim ahead of a turning target",
+			"Fire in bursts: the guns overheat, then must cool",
+			"BOOST  hold for speed      BRAKE  hold to slow down",
+			"ZOOM  for long shots      II  pause & change aircraft",
+			"II  also: graphics quality, performance readout",
+		]
 	var lines: PackedStringArray = [
 		"MOUSE  steer toward the aim circle",
 		"LEFT CLICK  fire the guns",
@@ -613,25 +636,27 @@ func _draw_hints(s: float) -> void:
 		"SPACE  brake: hold to slow down",
 		"A / D  roll      Q / E  rudder",
 		"C  centre aim     Z / WHEEL  zoom for long shots",
-		"ESC  pause & change aircraft",
-		"F4  snow showers on / off (weather test)",
 	]
-	if input != null and input.touch != null:
-		var steer: String = "LEFT THUMB  push the stick the way you want to fly"
-		if input.touch.tilting():
-			steer = "LEAN the phone to turn, tip it back to climb"
-		lines = [
-			steer,
-			"TILT  steer by leaning the phone, or by stick",
-			"FIRE  hold to shoot; aim ahead of a turning target",
-			"Fire in bursts: the guns overheat, then must cool",
-			"BOOST  hold for speed      BRAKE  hold to slow down",
-			"ZOOM  for long shots      II  pause & change aircraft",
-		]
-	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 376 * s), Vector2(410 * s, (24 + lines.size() * 26) * s))
+	if chat_hint:
+		lines.append("ENTER  chat with the other players")
+	lines.append_array([
+		"ESC  pause, settings & change aircraft",
+		"F2  graphics quality: high / medium / low",
+		"F3  performance readout: frame rate / everything / off",
+		"F4  snow showers on / off      F11  fullscreen",
+		"H  show or hide this list",
+	])
+	return lines
+
+
+func _draw_hints(s: float) -> void:
+	var a: float = 1.0 if help_open else clampf(hint_time / 2.0, 0.0, 1.0)
+	var lines: PackedStringArray = help_lines()
+	var tall: float = (24 + lines.size() * 25) * s
+	var rect: Rect2 = Rect2(Vector2(24 * s, size.y - 92 * s - tall), Vector2(430 * s, tall))   # stands on the instrument bar
 	if input != null and input.touch != null:
 		rect.position.y = 300 * s   # clear of the steering stick
 	draw_rect(rect, Color(PANEL, PANEL.a * a), true)
 	draw_rect(rect, Color(EDGE, EDGE.a * a), false, 1.0)
 	for i in range(lines.size()):
-		_text(rect.position + Vector2(16 * s, (30 + i * 26) * s), lines[i], 14 * s, Color(TEXT, a))
+		_text(rect.position + Vector2(16 * s, (29 + i * 25) * s), lines[i], 14 * s, Color(TEXT, a))

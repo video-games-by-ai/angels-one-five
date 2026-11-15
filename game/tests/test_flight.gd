@@ -42,6 +42,7 @@ func _init() -> void:
 	_test_valley_path()
 	_test_volume_settings_persist()
 	_test_frame_stats()
+	_test_help_list()
 	# The second map: same terrain, route and AI checks on its own data.
 	terrain = TerrainData.load_map("plav")
 	Weather.use_map(terrain)
@@ -1059,3 +1060,25 @@ func _test_frame_stats() -> void:
 	var loaded: GameSettings = GameSettings.load_or_default(path)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	check(loaded.stats_level == StatsOverlay.Level.FULL and GameSettings.new().stats_level == StatsOverlay.Level.OFF, "the readout is off by default and the chosen level persists")
+
+
+## H shows the list of commands and puts it away; the list names every key.
+func _test_help_list() -> void:
+	var hud: Hud = Hud.new()
+	check(hud.hint_time > 0.0 and not hud.help_open, "the commands are listed for a while when a flight starts")
+	hud.toggle_help()
+	check(hud.hint_time == 0.0 and not hud.help_open, "H puts that list away")
+	hud.toggle_help()
+	check(hud.help_open, "H shows it again, and it stays")
+	hud.toggle_help()
+	check(not hud.help_open, "H puts it away again")
+	var text: String = "\n".join(hud.help_lines())
+	var all_keys: bool = true
+	for key: String in ["MOUSE", "LEFT CLICK", "SHIFT", "W / S", "SPACE", "A / D", "Q / E", "C  ", "Z / WHEEL", "ESC", "F2", "F3", "F4", "F11", "H  "]:
+		all_keys = all_keys and text.contains(key)
+	check(all_keys and not text.contains("ENTER"), "the list names every key, with the quality (F2) and readout (F3) keys")
+	hud.chat_hint = true
+	check("\n".join(hud.help_lines()).contains("ENTER"), "in an online match it adds the chat key")
+	PlayerInput.register_actions()
+	check(InputMap.has_action("help") and InputMap.has_action("cycle_quality"), "H and F2 are bound")
+	hud.free()

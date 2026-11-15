@@ -158,6 +158,8 @@ open `game/project.godot` and press F5.
 | 1 / 2 / 3, ← / →, Enter | Choose and fly an aircraft on the selection screen |
 | M | Change map on the selection screen |
 | F11 | Fullscreen |
+| H | Show or hide the list of commands (it also shows for a few seconds when a flight starts) |
+| F2 | Graphics quality: High, Medium, Low, and round again |
 | F3 | Performance readout: off, frame rate, everything (see [Performance readout](#performance-readout-f3)) |
 | F4 | Snow showers on / off (weather test) |
 

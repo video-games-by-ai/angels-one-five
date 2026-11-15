@@ -34,7 +34,7 @@ static func register_actions() -> void:
 		"roll_left": [KEY_A, KEY_LEFT], "roll_right": [KEY_D, KEY_RIGHT],
 		"yaw_left": [KEY_Q], "yaw_right": [KEY_E], "boost": [KEY_SHIFT], "brake": [KEY_SPACE],
 		"center_aim": [KEY_C], "zoom": [KEY_Z], "pause": [KEY_ESCAPE], "toggle_fps": [KEY_F3],
-		"fullscreen": [KEY_F11], "toggle_weather": [KEY_F4],
+		"fullscreen": [KEY_F11], "toggle_weather": [KEY_F4], "help": [KEY_H], "cycle_quality": [KEY_F2],
 	}
 	for action: String in keys:
 		if InputMap.has_action(action):

@@ -610,6 +610,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		if pause_menu != null:   # rebuilt on next use so its choice matches
 			pause_menu.queue_free()
 			pause_menu = null
+	elif event.is_action_pressed("help") and mode == Mode.FLYING and hud.visible and not input.typing and not (pause_menu != null and pause_menu.visible):
+		hud.toggle_help()
+	elif event.is_action_pressed("cycle_quality") and not (pause_menu != null and pause_menu.visible) and benchmark_seconds <= 0.0 and not diag:
+		# High, Medium, Low, and round again.
+		settings.quality = ((settings.quality + GameSettings.QUALITY_NAMES.size() - 1) % GameSettings.QUALITY_NAMES.size()) as GameSettings.Quality
+		settings.save()
+		_apply_settings()
+		if pause_menu != null:   # rebuilt on next use so its choice matches
+			pause_menu.queue_free()
+			pause_menu = null
+		hud.announce("GRAPHICS QUALITY: %s" % GameSettings.QUALITY_NAMES[settings.quality].to_upper())
+		if mode == Mode.HANGAR:
+			hangar.notice("Graphics quality: %s" % GameSettings.QUALITY_NAMES[settings.quality])
 	elif event.is_action_pressed("toggle_weather"):
 		settings.snow_showers = not settings.snow_showers
 		settings.save()
@@ -1293,6 +1306,7 @@ func _apply_match_start(msg: Dictionary) -> void:
 	camera.snap(model.forward(), model.position)
 	hud.attach(player, opponents)
 	hud.mode_label = "ONLINE MATCH · FIRST TO %d KILLS" % score_limit
+	hud.chat_hint = true
 	hud.visible = not OS.get_cmdline_user_args().has("--no-hud")
 	if _player_flies():
 		_capture_mouse()
@@ -1651,6 +1665,11 @@ func _update_chat() -> void:
 	input.typing = chat.is_open()
 	if hud.visible and chat.busy():
 		hud.hint_time = minf(hud.hint_time, 1.0)   # the key hints share the corner: let them fade
+	# The list opened with H has the corner to itself: chat lines wait until it
+	# is put away. Starting to type puts it away.
+	if chat.is_open():
+		hud.help_open = false
+	chat.visible = not (hud.visible and hud.help_open)
 
 
 func _on_chat_line(line: Dictionary) -> void:
