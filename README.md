@@ -158,7 +158,7 @@ open `game/project.godot` and press F5.
 | 1 / 2 / 3, ← / →, Enter | Choose and fly an aircraft on the selection screen |
 | M | Change map on the selection screen |
 | F11 | Fullscreen |
-| F3 | Frame-rate readout |
+| F3 | Performance readout: off, frame rate, everything (see [Performance readout](#performance-readout-f3)) |
 | F4 | Snow showers on / off (weather test) |
 
 The small white cross shows where the nose and guns point; the amber circle is
@@ -232,7 +232,7 @@ The selection screen has a **Map** button (or press M). The choice is remembered
 
 Mouse sensitivity, inverted vertical mouse, assisted levelling, camera shake,
 master volume, engine & wind volume, guns & effects volume, graphics quality
-(Low / Medium / High) and fullscreen. Changes apply at once and are saved, with
+(Low / Medium / High), the performance readout and fullscreen. Changes apply at once and are saved, with
 the last aircraft and map, to Godot's user folder (`settings.cfg`), so they are
 kept for the next launch.
 
@@ -320,6 +320,43 @@ The presets differ in terrain detail distance, tree draw distance and shadows,
 shadow distance, screen-space reflections and ambient occlusion, MSAA, cloud
 count and render scale (Low renders at 80% with FSR upscaling).
 
+### Performance readout (F3)
+
+F3 steps through off, frame rate and everything; the pause menu has the same
+choice, which is how a phone gets it. The choice is saved. It sits in the top
+right corner, on every screen.
+
+![The performance readout in an online match](docs/screenshots/stats-readout.png)
+
+**Frame rate** is one line: frames a second, the time one frame takes and,
+when you have joined a match, your ping.
+
+**Everything** adds what explains a bad number:
+
+| Figure | What it tells you |
+|---|---|
+| 1% low | The rate the slowest hundredth of frames ran at, over the last five seconds. The average can read 100 while this reads 30: that is stutter |
+| Slowest frame, and the graph | Each bar is one frame, newest on the right, with lines at the frame times of 60 and 30 frames a second. A tall bar is a hitch |
+| GPU, CPU draw, CPU game | Where a frame's time goes: the graphics card, the processor preparing the picture, the game's own simulation. If GPU is the largest, lower quality or resolution helps; if not, it will not |
+| Draw calls, triangles | How much is being drawn. Compare two places or two quality levels |
+| Memory, video and game | A phone that runs out closes the game |
+| Resolution, quality, vsync, graphics card | What the figures were measured at, so a screenshot from a friend can be read. With vsync on, the frame rate stops at the screen's rate however fast the computer is |
+
+Online it also shows the link:
+
+| Figure | What it tells you |
+|---|---|
+| Your ping | Round trip to the host and back, as a game message makes it: both games read the network once per tick, which adds about 20 ms to what a network tool would show. "Varies by" is its jitter |
+| Data | What the game sends and receives, all players together |
+| Ping, per player | That player's round trip to the host |
+| Delay, per player | How old the picture of their aircraft is: their report's journey to you (through the host unless one of you is the host) plus the 0.1 s the game holds reports back to draw smooth motion. This is the figure that matters in a fight, and it is always well above the ping. The screen adds a frame or two on top, as it does for your own aircraft |
+| Lost | The share of their position reports that never reached you |
+| Guess | The share of the time their aircraft was drawn ahead of its newest report, because reports were late. Above a few percent you will see it jump |
+
+Delay was checked against the real age of the picture; see
+[Measuring the link](docs/multiplayer-design.md#measuring-the-link).
+`--stats=0|1|2` sets the level for one run without saving it.
+
 ## How it is built
 
 Everything is original or freely licensed; nothing is downloaded at build time
@@ -395,7 +432,10 @@ packet loss, and real loopback connections for each security rule (a host
 that is not the invite's, impostors answering with their own, damaged or the
 relayed real certificate, wrong or missing secret, blocking, unencrypted clients, junk
 packets, version mismatch, Kick, New invite) and chat (relay, sender stamping,
-flood limit, fading and wrapping, typing without losing the mouse).
+flood limit, fading and wrapping, typing without losing the mouse), and the
+figures of the performance readout (ping, each player's delay, lost reports).
+`tools/net_delay_check.sh` flies a match through a proxy that delays, shuffles
+and drops packets, and fails if the delay shown differs from the real one.
 `tools/net_smoke.sh` plays a whole match between two headless copies of the game
 flown by the AI, each sending a chat line (`AIRFLIGHT_SERVER=1` for a dedicated
 server and two players). `game/tests/render_chat.gd` draws the chat over game
@@ -429,7 +469,7 @@ engine loop that would clip.
 - `input/`: `FlightCommand`, the device-independent pilot intent, the mouse/keyboard source and the on-screen touch controls, with tilt steering from the phone's gravity sensor
 - `camera/`: chase camera with boost pull-back and adjustable shake
 - `net/`: online play: invite, message format, session (encryption, secret check, lobby), the host's referee, remote aircraft smoothing, UPnP and address detection
-- `ui/`: aircraft selection, online lobby, HUD with target markers, the see-through airframe damage panel and the opponent's target panel, lens flare, pause menu
+- `ui/`: aircraft selection, online lobby, HUD with target markers, the see-through airframe damage panel and the opponent's target panel, performance readout, lens flare, pause menu
 
 Flight runs on a fixed 60 Hz step and is rendered with physics interpolation. All
 pilot input goes through `FlightCommand`, so gamepad, touch, AI or network input

@@ -56,7 +56,6 @@ var message: String = ""
 var message_time: float = 0.0
 var lost_reason: String = "AIRCRAFT LOST"
 var clock: float = 0.0
-var show_fps: bool = false
 var hint_time: float = 14.0
 var crash_time: float = 0.0
 var ui_scale: float = 1.0
@@ -205,9 +204,6 @@ func _draw() -> void:
 	_draw_warnings(s)
 	if hint_time > 0.0:
 		_draw_hints(s)
-	if show_fps:
-		var fps: String = "%d FPS  %.1f ms" % [Engine.get_frames_per_second(), 1000.0 / maxf(Engine.get_frames_per_second(), 1.0)]
-		draw_string(font, Vector2(size.x - 24 * s, 34 * s), fps, HORIZONTAL_ALIGNMENT_RIGHT, -1, int(15 * s), TEXT)
 
 
 func _panel(rect: Rect2) -> void:

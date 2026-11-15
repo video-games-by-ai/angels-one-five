@@ -21,6 +21,7 @@ var engine_volume: float = 1.0
 var effects_volume: float = 1.0
 var quality: Quality = Quality.HIGH
 var fullscreen: bool = false
+var stats_level: int = 0   ## performance readout (StatsOverlay.Level): off, frame rate, everything
 var aircraft: int = 1   ## last aircraft flown (Airframes.Id)
 var snow_showers: bool = true   ## test weather: local snow showers on a clear day
 var map: String = "alpine"      ## last map flown (TerrainData.MAPS id)
@@ -54,6 +55,7 @@ static func load_or_default(path: String = PATH) -> GameSettings:
 		if not phone or int(cfg.get_value("graphics", "phone_defaults", 0)) >= PHONE_DEFAULTS:
 			s.quality = clampi(int(cfg.get_value("graphics", "quality", s.quality)), 0, 2) as Quality
 		s.fullscreen = bool(cfg.get_value("graphics", "fullscreen", s.fullscreen))
+		s.stats_level = clampi(int(cfg.get_value("graphics", "stats", s.stats_level)), 0, 2)
 		s.snow_showers = bool(cfg.get_value("game", "snow_showers", s.snow_showers))
 		s.aircraft = clampi(int(cfg.get_value("game", "aircraft", s.aircraft)), 0, 2)
 		s.map = String(cfg.get_value("game", "map", s.map))
@@ -80,6 +82,7 @@ func save(path: String = PATH) -> void:
 	cfg.set_value("graphics", "quality", quality)
 	cfg.set_value("graphics", "phone_defaults", PHONE_DEFAULTS)
 	cfg.set_value("graphics", "fullscreen", fullscreen)
+	cfg.set_value("graphics", "stats", stats_level)
 	cfg.set_value("game", "aircraft", aircraft)
 	cfg.set_value("game", "snow_showers", snow_showers)
 	cfg.set_value("game", "map", map)

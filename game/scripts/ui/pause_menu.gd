@@ -67,6 +67,16 @@ func build(game_settings: GameSettings) -> void:
 		settings.quality = i as GameSettings.Quality
 		_changed())
 	quality_row.add_child(quality)
+	var stats_row: HBoxContainer = _row(box, "Performance readout" if by_touch else "Performance readout (F3)")
+	var stats: OptionButton = OptionButton.new()
+	for name in StatsOverlay.LEVEL_NAMES:
+		stats.add_item(name)
+	stats.selected = settings.stats_level
+	stats.custom_minimum_size = Vector2(170, 44)
+	stats.item_selected.connect(func(i: int) -> void:
+		settings.stats_level = i
+		_changed())
+	stats_row.add_child(stats)
 	_check(box, "Fullscreen", settings.fullscreen, func(v: bool) -> void: settings.fullscreen = v)
 	_check(box, "Snow showers (weather test, F4)", settings.snow_showers, func(v: bool) -> void: settings.snow_showers = v)
 

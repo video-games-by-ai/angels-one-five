@@ -10,14 +10,36 @@ const DELAY: float = 0.1
 const MAX_EXTRAPOLATE: float = 0.25
 const KEEP: int = 24
 const TICK: float = 1.0 / 60.0
+const REPORT_TICKS: int = 2          ## a report is sent every this many physics ticks: 30 a second
+const MEASURE_SECONDS: float = 3.0   ## the link figures below are averages over this long
 
 var snaps: Array[Dictionary] = []
 var play_time: float = -1.0
 
+## Measured for the stats readout, refreshed every MEASURE_SECONDS of drawing.
+## `behind` is the part of the delay this game adds: how far the moment drawn
+## lies before the newest report, plus how long ago that report came in. The
+## age of what is on screen is the report's journey here plus this.
+var behind: float = -1.0             ## seconds; -1 until measured
+var lost: float = 0.0                ## share of reports that never came, or came too late to use
+var guessed: float = 0.0             ## share of the time drawn past the newest report (a guess)
 
+var _clock: float = 0.0              ## this game's time, counted by sample()
+var _arrived: float = 0.0            ## _clock when the newest report came in
+var _last_tick: int = -1
+var _got: int = 0
+var _missed: int = 0
+var _behind_sum: float = 0.0
+var _guess_time: float = 0.0
+var _span: float = 0.0
+
+
+## Forget the reports (a respawn, or the sender restarted its clock). The
+## figures already measured stay until the next ones are ready.
 func reset() -> void:
 	snaps.clear()
 	play_time = -1.0
+	_last_tick = -1
 
 
 ## Add a report; its `tick` is the sender's own physics tick.
@@ -34,6 +56,12 @@ func push(state: Dictionary) -> void:
 	snaps.append(s)
 	if snaps.size() > KEEP:
 		snaps.pop_front()
+	var tick: int = int(s.tick)
+	if _last_tick >= 0 and tick - _last_tick <= 60:   # a longer gap is a pause, not loss
+		_missed += maxi((tick - _last_tick) / REPORT_TICKS - 1, 0)
+	_last_tick = tick
+	_got += 1
+	_arrived = _clock
 
 
 func newest() -> Dictionary:
@@ -57,6 +85,7 @@ func sample(dt: float) -> Dictionary:
 		else:
 			play_time += error * 0.05
 	var t: float = play_time
+	_measure(dt, latest, t)
 	if t <= snaps[0].time:
 		return snaps[0]
 	for i in range(snaps.size() - 1):
@@ -70,6 +99,26 @@ func sample(dt: float) -> Dictionary:
 	var out: Dictionary = last.duplicate()
 	out.position = (last.position as Vector3) + (last.direction as Vector3) * float(last.speed) * ahead
 	return out
+
+
+## Keep the link figures: called once per sample with the moment being drawn.
+func _measure(dt: float, latest: float, t: float) -> void:
+	var shown: float = clampf(t, float(snaps[0].time), latest + MAX_EXTRAPOLATE)
+	_behind_sum += (latest - shown + _clock - _arrived) * dt
+	if t > latest:
+		_guess_time += dt
+	_span += dt
+	_clock += dt
+	if _span < MEASURE_SECONDS:
+		return
+	behind = _behind_sum / _span
+	guessed = _guess_time / _span
+	lost = float(_missed) / float(_missed + _got) if _got > 0 else 1.0
+	_behind_sum = 0.0
+	_guess_time = 0.0
+	_span = 0.0
+	_got = 0
+	_missed = 0
 
 
 static func _blend(a: Dictionary, b: Dictionary, t: float) -> Dictionary:

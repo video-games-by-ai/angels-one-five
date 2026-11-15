@@ -27,6 +27,7 @@ extends Node3D
 ##   --view=X,Y,Z,YAW,PITCH   fixed camera for map screenshots (metres, degrees; yaw 0 = north, 90 = west)
 ##   --quit-at=SECONDS
 ##   --log                    print position / FPS once per second
+##   --stats=0|1|2            performance readout off / frame rate / everything (F3 in the game; not saved)
 ##   --no-trees --no-clouds --no-hud   diagnostics: skip a subsystem
 ##   --opponent-hull=A,B,...  diagnostics: opponents start with these hull shares (0..1), by index
 ##
@@ -113,6 +114,8 @@ var net: NetSession
 var referee: MatchReferee         ## host only
 var lobby: Lobby
 var chat: ChatBox
+var stats: StatsOverlay
+var stats_forced: int = -1        ## --stats
 var online: bool = false          ## a networked match is being flown
 var world_dirty: bool = false     ## offline combatants were replaced; leaving reloads the scene
 var server_mode: bool = false
@@ -130,7 +133,8 @@ var matches_to_quit: int = 0
 var cli_say: String = ""
 var matches_ended: int = 0
 var net_tick: int = 0
-var latest_states: Dictionary = {}    ## host: combatant id -> newest accepted motion report
+var net_tick_unix: float = 0.0        ## real time of the current online tick, for --log
+var latest_states: Dictionary = {}    ## host: combatant id -> newest motion report of an aircraft flown here
 var claims: Dictionary = {}           ## hits our rounds made this tick, by target and zone
 var kicked: Dictionary = {}
 var end_timer: float = -1.0
@@ -202,6 +206,8 @@ func _ready() -> void:
 			opponent_hull = arg.trim_prefix("--opponent-hull=").split_floats(",")
 		elif arg.begins_with("--quit-at="):
 			quit_at = float(arg.trim_prefix("--quit-at="))
+		elif arg.begins_with("--stats="):
+			stats_forced = clampi(int(arg.trim_prefix("--stats=")), 0, 2)
 		elif arg == "--host":
 			cli_host = true
 		elif arg == "--server":
@@ -376,6 +382,10 @@ func _ready() -> void:
 	if not server_mode:
 		chat = ChatBox.new()   # above the lobby, below the pause menu (made later)
 		layer.add_child(chat)
+		stats = StatsOverlay.new()
+		stats.settings = settings
+		stats.right_inset = 130.0 if touch != null else 0.0   # clear of the pause button
+		layer.add_child(stats)
 	ui_layer = layer
 	_apply_settings()
 	if pending_notice != "":
@@ -522,6 +532,8 @@ func _apply_settings() -> void:
 	DeviceDiag.mark("settings: %s quality, %s, msaa %d, fxaa %s, scale %.2f, snow %s" % [GameSettings.QUALITY_NAMES[settings.quality],
 		RenderingServer.get_current_rendering_method(), int(profile.msaa), profile.fxaa, float(profile.render_scale), settings.snow_showers])
 	settings.apply_audio()
+	if stats != null:
+		stats.level = stats_forced if stats_forced >= 0 else settings.stats_level
 	if touch != null and touch.steer_by_tilt != settings.tilt_steering:
 		touch.steer_by_tilt = settings.tilt_steering
 		touch.release_stick()
@@ -590,8 +602,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			_ensure_pause_menu()
 			pause_menu.open(false)
 			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	elif event.is_action_pressed("toggle_fps"):
-		hud.show_fps = not hud.show_fps
+	elif event.is_action_pressed("toggle_fps") and stats != null and not (pause_menu != null and pause_menu.visible):
+		stats_forced = -1
+		settings.stats_level = (settings.stats_level + 1) % StatsOverlay.LEVEL_NAMES.size()
+		settings.save()
+		_apply_settings()
+		if pause_menu != null:   # rebuilt on next use so its choice matches
+			pause_menu.queue_free()
+			pause_menu = null
 	elif event.is_action_pressed("toggle_weather"):
 		settings.snow_showers = not settings.snow_showers
 		settings.save()
@@ -801,6 +819,10 @@ func _process(delta: float) -> void:
 		DeviceDiag.mark("tilt sensor: the %s reads (%.1f, %.1f, %.1f)" % ["gravity sensor" if Input.get_gravity() != Vector3.ZERO else "accelerometer", g.x, g.y, g.z])
 	_online_tick(delta)
 	_update_chat()
+	if stats != null:
+		var nobody: Array[Combatant] = []
+		stats.session = net
+		stats.remotes = opponents if online else nobody
 	if mode == Mode.FLYING and player != null:
 		var shown: Transform3D = aircraft.get_global_transform_interpolated()
 		input.camera_up = camera.up_vector
@@ -1142,6 +1164,8 @@ func _on_session_ended(reason: String) -> void:
 		return
 	if world_dirty:
 		pending_notice = reason
+		if reason != "":
+			print("NET: ", reason)
 		get_tree().paused = false
 		get_tree().reload_current_scene.call_deferred()
 		return
@@ -1278,6 +1302,7 @@ func _apply_match_start(msg: Dictionary) -> void:
 
 func _physics_online(delta: float) -> void:
 	net_tick += 1
+	net_tick_unix = Time.get_unix_time_from_system()
 	for c in combatants:
 		if c.left or not c.model.alive:
 			continue
@@ -1316,7 +1341,7 @@ func _physics_online(delta: float) -> void:
 			_local_hit(impact)
 	if bullets.near_misses > 0 and player != null and player.model.alive:
 		audio.whizz()
-	if player != null and net_tick % 2 == 0:
+	if player != null and net_tick % SnapshotBuffer.REPORT_TICKS == 0:
 		var state: Dictionary = SnapshotBuffer.capture(player.model, player.life, net_tick)
 		if net.is_host():
 			if referee.accept_state(player, state):
@@ -1326,7 +1351,7 @@ func _physics_online(delta: float) -> void:
 	_flush_claims()
 	if net != null and net.is_host() and referee != null:
 		_dispatch(referee.tick(delta))
-		if net_tick % 2 == 0:
+		if net_tick % SnapshotBuffer.REPORT_TICKS == 0:
 			_send_world()
 		for c in combatants:
 			if c.remote and not c.left and not kicked.has(c.peer_id) and referee.strikes_exceeded(c):
@@ -1380,20 +1405,34 @@ func _local_crash(c: Combatant) -> void:
 		net.send(1, {"type": NetProtocol.Msg.CRASHED, "life": c.life})
 
 
-## Host: send every joiner where everyone else is.
+## Host: send every joiner the motion of the aircraft flown here (the host's
+## own). What the other joiners report is passed on by _relay_state.
 func _send_world() -> void:
-	for r in combatants:
-		if not r.remote or r.left:
+	var states: Array[Dictionary] = []
+	for c in combatants:
+		if c.remote or c.left or not c.model.alive or not latest_states.has(c.id):
 			continue
-		var states: Array[Dictionary] = []
-		for c in combatants:
-			if c == r or c.left or not c.model.alive or not latest_states.has(c.id):
-				continue
-			var s: Dictionary = latest_states[c.id].duplicate()
-			s.id = c.id
-			states.append(s)
-		if not states.is_empty():
+		var s: Dictionary = latest_states[c.id].duplicate()
+		s.id = c.id
+		states.append(s)
+	if states.is_empty():
+		return
+	for r in combatants:
+		if r.remote and not r.left:
 			net.send(r.peer_id, {"type": NetProtocol.Msg.WORLD, "states": states})
+
+
+## Host: pass a joiner's accepted report on to the other joiners, at once and
+## every one. (Until 2026-11-14 the host kept only the newest and sent it with
+## its own 30 times a second: when two reports came in between two sends the
+## first was never sent, up to 18 % of them on a link with a little jitter,
+## and each waited half a tick on average.)
+func _relay_state(from: Combatant, state: Dictionary) -> void:
+	var s: Dictionary = state.duplicate()
+	s.id = from.id
+	for r in combatants:
+		if r.remote and not r.left and r != from:
+			net.send(r.peer_id, {"type": NetProtocol.Msg.WORLD, "states": [s]})
 
 
 ## Host: apply the referee's decisions here and tell everyone.
@@ -1424,8 +1463,8 @@ func _on_net_message(peer: int, msg: Dictionary) -> void:
 		match type:
 			NetProtocol.Msg.STATE:
 				if referee.accept_state(c, msg.state):
-					latest_states[c.id] = msg.state
 					c.buffer.push(msg.state)
+					_relay_state(c, msg.state)
 			NetProtocol.Msg.HIT_CLAIM:
 				_dispatch(referee.claim_hits(c, msg.claims))
 			NetProtocol.Msg.CRASHED:
@@ -1625,7 +1664,13 @@ func _log_online() -> void:
 		if c != player:
 			var d: int = int(c.model.position.distance_to(model.position)) if model != null else 0
 			others += " | %s %s hull=%d alive=%s k=%d l=%d d=%d" % [c.pilot_name, String(c.model.spec.short), int(c.model.hull), c.model.alive, c.kills, c.losses, d]
+			if c.buffer != null:
+				# The link as the stats readout shows it. `shown` is the moment being drawn, on the sender's clock.
+				others += " ping=%d delay=%d lost=%d%% guess=%d%% shown=%.3f" % [int(net.ping_ms(c.peer_id)), int(StatsOverlay.view_delay_ms(net, c)),
+					roundi(c.buffer.lost * 100.0), roundi(c.buffer.guessed * 100.0), c.buffer.play_time]
 	var me: String = "server"
 	if player != null:
 		me = "%s pos=%s speed=%d hull=%d alive=%s k=%d l=%d" % [player.pilot_name, str(model.position.round()), int(model.speed), int(model.hull), model.alive, player.kills, player.losses]
-	print("NET t=%d fps=%d %s%s" % [int(elapsed), Engine.get_frames_per_second(), me, others])
+	# tick and its real time place this game's clock, so two logs from one machine
+	# show how old each picture really was (tools/net_delay_check.py).
+	print("NET t=%d fps=%d tick=%d unix=%.4f %s%s" % [int(elapsed), Engine.get_frames_per_second(), net_tick, net_tick_unix, me, others])

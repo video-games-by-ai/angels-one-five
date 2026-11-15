@@ -5,7 +5,10 @@ extends RefCounted
 ## exact length and every value first; anything malformed decodes to {}. This is
 ## the only code that reads bytes from another machine.
 
-const VERSION: int = 3   ## 2: chat, 3: brake flag
+## 2: chat, 3: brake flag. PINGS was added without a new version: only the host
+## sends it, and a game that does not know it ignores it.
+const VERSION: int = 3
+const PING_MAX: int = 60000          ## ms; a longer round trip is reported as this
 const MAX_PLAYERS: int = 4
 const NAME_MAX: int = 16
 const REASON_MAX: int = 120
@@ -16,12 +19,12 @@ const MAX_ROUNDS_PER_CLAIM: int = 40
 const ZONES: int = 5
 const NO_ONE: int = 255
 
-enum Msg { HELLO = 1, WELCOME, REJECT, ROSTER, MATCH_START, STATE, WORLD, HIT_CLAIM, DAMAGE, CRASHED, DESTROYED, SPAWN, MATCH_END, LOBBY, LEFT, CHAT }
+enum Msg { HELLO = 1, WELCOME, REJECT, ROSTER, MATCH_START, STATE, WORLD, HIT_CLAIM, DAMAGE, CRASHED, DESTROYED, SPAWN, MATCH_END, LOBBY, LEFT, CHAT, PINGS }
 
 ## What a joiner may send. Everything else only the host may send.
 const FROM_CLIENT: Array[int] = [Msg.HELLO, Msg.STATE, Msg.HIT_CLAIM, Msg.CRASHED, Msg.CHAT]
 ## Messages that are sent unreliably (a newer one replaces a lost one).
-const UNRELIABLE: Array[int] = [Msg.STATE, Msg.WORLD]
+const UNRELIABLE: Array[int] = [Msg.STATE, Msg.WORLD, Msg.PINGS]
 
 const FLAG_BOOSTING: int = 1
 const FLAG_FIRING: int = 2
@@ -115,6 +118,13 @@ static func encode(m: Dictionary) -> PackedByteArray:
 			w.put_u32(int(m.get("peer", 0)))
 			_put_text(w, String(m.get("name", "")), NAME_MAX)
 			_put_text(w, String(m.text), CHAT_MAX)
+		Msg.PINGS:
+			# Each player's round trip to the host, as the host measures it.
+			var pings: Array = m.pings
+			w.put_u8(pings.size())
+			for p: Dictionary in pings:
+				w.put_u32(int(p.peer))
+				w.put_u16(clampi(int(p.ms), 0, PING_MAX))
 		_:
 			push_error("NetProtocol: unknown message type %d" % type)
 			return PackedByteArray()
@@ -226,6 +236,15 @@ static func decode(bytes: PackedByteArray) -> Dictionary:
 			m.name = r.text(NAME_MAX)
 			m.text = r.text(CHAT_MAX)
 			r.require(String(m.text) != "")
+		Msg.PINGS:
+			var n: int = r.u8()
+			r.require(n >= 1 and n <= MAX_PLAYERS)
+			var pings: Array[Dictionary] = []
+			for i in range(n if r.ok else 0):
+				var p: Dictionary = {"peer": r.u32(), "ms": r.u16()}
+				r.require(int(p.peer) >= 1 and int(p.ms) <= PING_MAX)
+				pings.append(p)
+			m.pings = pings
 		_:
 			return {}
 	if not r.ok or not r.at_end():

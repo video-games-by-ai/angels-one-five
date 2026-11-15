@@ -38,6 +38,7 @@ func _initialize() -> void:
 	_test_chat_box()
 	_test_typing_keeps_mouse()
 	_test_chat_live()
+	_test_link_figures()
 	print("NET TESTS: %s" % ("PASS" if failures == 0 else "%d FAILED" % failures))
 	quit(1 if failures > 0 else 0)
 
@@ -190,6 +191,7 @@ func _samples() -> Array[Dictionary]:
 		{"type": NetProtocol.Msg.LOBBY},
 		{"type": NetProtocol.Msg.LEFT, "id": 1},
 		{"type": NetProtocol.Msg.CHAT, "peer": 77, "name": "Ana", "text": "rematch after this one?"},
+		{"type": NetProtocol.Msg.PINGS, "pings": [{"peer": 1, "ms": 0}, {"peer": 77, "ms": 48}]},
 	]
 
 
@@ -308,6 +310,8 @@ func _test_snapshot_buffer() -> void:
 			lag_ok = lag_ok and (out.position as Vector3).z > -speed * tick / 60.0
 	check(worst < 3.0, "a remote aircraft is drawn smoothly %.0f ms behind (worst error %.2f m)" % [SnapshotBuffer.DELAY * 1000.0, worst])
 	check(lag_ok, "it is drawn behind its newest report, never ahead")
+	check(buffer.behind > SnapshotBuffer.DELAY - 0.002 and buffer.behind < SnapshotBuffer.DELAY + 0.02 and buffer.lost == 0.0 and buffer.guessed == 0.0,
+		"on a clean link it measures its own delay (%.0f ms behind the newest report), no loss, no guessing" % (buffer.behind * 1000.0))
 	# Reports stop: it carries on briefly, then holds.
 	var last_z: float = 0.0
 	for i in range(60):
@@ -358,6 +362,8 @@ func _test_snapshot_under_loss() -> void:
 		last = p
 	check(worst < 4.0, "with 30%% loss and jitter the drawn path stays within %.2f m of the true one" % worst)
 	check(biggest_step < speed / 60.0 * 1.6, "and it moves without jumps (largest step %.2f m per frame at %.2f m nominal)" % [biggest_step, speed / 60.0])
+	check(buffer.lost > 0.25 and buffer.lost < 0.5 and buffer.guessed > 0.0 and buffer.guessed < 0.5,
+		"it measures that link: %d%% of reports missing, drawn from a guess %d%% of the time" % [roundi(buffer.lost * 100.0), roundi(buffer.guessed * 100.0)])
 
 
 # --- Referee -------------------------------------------------------------------
@@ -960,3 +966,35 @@ func _test_chat_live() -> void:
 	client.close()
 	host.close()
 	_pump([host, client], 0.2)
+
+
+# --- Link measurements (the stats readout) ---------------------------------------
+
+func _test_link_figures() -> void:
+	var host: NetSession = _host(PORT + 9)
+	var client: NetSession = _client(Invite.decode(host.invite_text()))
+	_pump([host, client], 6.0, func() -> bool: return host.players.size() == 2 and client.players.size() == 2)
+	var me: int = client.my_id()
+	var known: bool = _pump([host, client], 5.0, func() -> bool: return client.pings.has(me) and client.pings.has(1) and host.pings.has(me))
+	check(known, "within seconds both ends know the joiner's ping, and the joiner has the host's table")
+	var mine: float = client.ping_ms(me)
+	check(mine >= 0.0 and mine < 60.0 and host.ping_ms(me) >= 0.0 and host.ping_ms(me) < 60.0,
+		"over loopback the round trip is a few ms at both ends (joiner %d ms, host %d ms)" % [int(mine), int(host.ping_ms(me))])
+	check(client.ping_ms(1) == 0.0 and host.ping_ms(1) == 0.0 and client.ping_ms(4242) == -1.0, "the host's own ping is 0 and an unknown player's is unknown")
+	check(is_equal_approx(client.transit_ms(1), mine * 0.5) and is_equal_approx(host.transit_ms(me), host.ping_ms(me) * 0.5),
+		"between a joiner and the host a report travels half the round trip")
+	client.pings[99] = 40   # as if the host's table listed a second joiner
+	check(is_equal_approx(client.transit_ms(99), mine * 0.5 + 20.0) and client.transit_ms(4242) == -1.0,
+		"between two joiners it travels half of each round trip, through the host")
+	_pump([host, client], 1.2)
+	check(not client.pings.has(99) and client.pings.has(me), "the host's next table replaces the joiner's list of the others")
+	check(host.sent_rate > 0.0 and client.received_rate > 0.0, "both ends measure their data rate (host sends %d bytes a second in the lobby)" % int(host.sent_rate))
+	var c: Combatant = Combatant.new()
+	c.peer_id = 1
+	c.buffer = SnapshotBuffer.new()
+	check(StatsOverlay.view_delay_ms(client, c) == -1.0, "an aircraft's delay is unknown until its reports have been measured")
+	c.buffer.behind = 0.108
+	check(is_equal_approx(StatsOverlay.view_delay_ms(client, c), mine * 0.5 + 108.0), "then it is the report's journey plus the smoothing delay")
+	client.close()
+	host.close()
+	_pump([host], 0.2)

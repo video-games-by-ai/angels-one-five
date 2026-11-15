@@ -291,11 +291,14 @@ responsive flight model. `FlightModel` would support it later without a redesign
 | `damage` | reliable | when it happens | target, shooter, zone, new hull and zone health |
 | `destroyed`, `spawn`, `score` | reliable | when it happens | ids, position and heading, totals |
 | `hello`, `roster`, `match` | reliable | lobby and match changes | names, aircraft, teams, start, end, rematch |
+| `pings` | unreliable | once a second, host to joiners | each player's round trip to the host, for the performance readout |
 | `chat` | reliable | when someone talks | sender, name and up to 80 characters. A joiner sends only the text; the host stamps the sender and relays it to everyone, the sender included, so all see the same lines. Past a burst of 4, one line per 1.5 s per joiner; extra lines are dropped |
 
-Each client sends its own `state` to the host. The host checks it and sends every
-client one combined packet per tick with everyone else's state. In 1v1 that is a
-few kilobytes per second each way. In 4v4 the host uploads well under 1 Mbit/s.
+Each client sends its own `state` to the host. The host checks it and passes it
+on to the other clients at once, and sends its own aircraft's state 30 times a
+second. In 1v1 that is a few kilobytes per second each way. In 4v4 the host
+uploads well under 1 Mbit/s. Unreliable messages are sent unordered; see the
+decisions under [Measuring the link](#measuring-the-link).
 
 ### Remote aircraft
 
@@ -320,6 +323,96 @@ Every `hit_claim`: shooter and target alive and on different teams, the shooter'
 (`BulletField.SPEED` × `LIFETIME` plus a margin), no more rounds than the gun's
 rate of fire allows, zone a valid value. Damage per round comes from the host's
 own `Airframes` table, never from the packet.
+
+### Measuring the link
+
+Built 2026-11-14 for the performance readout (F3; the README explains each
+figure). Code: `NetSession._measure_link`, `SnapshotBuffer._measure`,
+`StatsOverlay.view_delay_ms`.
+
+- **Ping** is ENet's own round-trip figure for the connection. Both games read
+  the network once per tick, so it is about 20 ms above the wire's round trip.
+  That is what a game message experiences. The host shares everyone's ping in
+  `pings`; a joiner measures its own.
+- **Delay** of another player's aircraft is how old its picture is: the
+  report's journey (half the round trip of each end that is not the host)
+  plus what the smoothing adds. The
+  smoothing part is measured, not assumed: how far the moment drawn lies
+  behind the newest report, plus how long ago that report came in. On a clean
+  link it is about 105 ms.
+- **Lost** counts gaps in the tick numbers of the reports that arrived.
+  **Guess** is the share of time the aircraft was drawn past its newest report.
+  Both are averages over 3 s.
+
+Decisions:
+
+- **Question:** can ENet's round-trip figure be used as it is? **Decision:**
+  yes, but each end now asks for a ping four times a second. **Why:** ENet
+  pings by itself only when nothing else arrives. In a match reports arrive 30
+  times a second, so it never pinged and the figure went stale: in the first
+  test the host showed 136 ms for a link that measured 100 ms.
+- **Question:** should ENet's throttle stay on? **Decision:** off
+  (`throttle_configure(5000, 2, 0)`, both ends). **Why:** it discards
+  unreliable packets, here every motion report, when a round trip is much
+  longer than the recent best, and recovers step by step. The first run of the
+  readout showed 3 to 9 % of reports missing on a link that dropped nothing.
+  The cause was one hitch at match start taking the throttle to "discard all".
+  At 2 kB/s there is no congestion to relieve. With it off the same link loses
+  0 %.
+- **Question:** does `pings` need a new protocol version? **Decision:** no.
+  **Why:** only the host sends it and an older game ignores it. A 0.4.0 joiner
+  with a new host, and a new joiner with a 0.4.0 host, each flew a 35 s match
+  without errors. Against an older host the readout shows no ping for the
+  other joiners.
+
+- **Question:** how should the host pass one joiner's reports to the others?
+  **Decision:** every report, the moment it is accepted
+  (`main.gd`, `_relay_state`). **Why:** until 2026-11-14 the host kept the
+  newest report per aircraft and sent them together 30 times a second. When
+  jitter brought two reports in between two sends, the first was never sent.
+  Three server matches with 12 ms of jitter and no loss at all showed 1 to
+  18 % of reports missing between the two joiners, a different share each run.
+  Passing each on at once made that 1 % in all three and took about 8 ms off
+  the delay. It affected matches where two joiners see each other (three or
+  more players, or a dedicated server), never 1v1 with a player hosting.
+- **Question:** ordered or unordered delivery for unreliable messages?
+  **Decision:** unordered (`TRANSFER_MODE_UNRELIABLE`). **Why:** ordered, ENet
+  discards any packet that arrives after one sent later, whatever is in it.
+  With the change above the host sends a joiner several aircraft's reports
+  within a millisecond, and in four-player matches with 12 to 25 ms of jitter
+  and no loss 27 to 48 % of them were discarded. Unordered, the same matches
+  lose 0 to 2 %. Nothing needs the order: the referee and the smoothing each
+  drop a report older than the one they have, by its tick. Older games still
+  send ordered, which the new one accepts.
+
+**Is the delay shown the real one?** `tools/net_delay_check.sh` answers it.
+Games on one machine fly a match by AI, each joiner through
+`tools/net_delay_proxy.py`, which delays, shuffles and drops packets. All share
+one clock, so the logs give the real age of every picture
+(`tools/net_delay_check.py`). Readout against real, 2026-11-14, about 30
+samples each:
+
+| Link, each way | Viewer sees | Their ping | Readout | Real | Lost |
+|---|---|---|---|---|---|
+| No delay | host sees joiner | 23 ms | 119 ms | 114 ms | 0 % |
+| No delay | joiner sees host | | 116 ms | 120 ms | 0 % |
+| 40 ms | host sees joiner | 110 ms | 165 ms | 162 ms | 0 % |
+| 40 ms | joiner sees host | | 159 ms | 155 ms | 0 % |
+| 60 ms, up to 25 ms jitter | host sees joiner | 171 ms | 197 ms | 193 ms | 0 % |
+| 60 ms, up to 25 ms jitter | joiner sees host | | 191 ms | 188 ms | 0 % |
+| 60 ms, jitter, 5 % loss | host sees joiner | 171 ms | 197 ms | 189 ms | 5 % |
+| 60 ms, jitter, 5 % loss | joiner sees host | | 200 ms | 196 ms | 5 % |
+| Server; joiners at 30 and 70 ms, 10 ms jitter, 2 % loss | 30 ms joiner sees the other | 174 ms | 243 ms | 242 ms | 4 % |
+| Server; joiners at 30 and 70 ms, 10 ms jitter, 2 % loss | 70 ms joiner sees the other | 92 ms | 246 ms | 240 ms | 4 % |
+| Host and joiners at 30, 50 and 70 ms, 12 ms jitter | joiners see each other (6 pairs) | 94 to 181 ms | 223 to 266 ms | 220 to 262 ms | 0 % |
+| Host and joiners at 30, 50 and 70 ms, 25 ms jitter | joiners see each other (6 pairs) | 107 to 194 ms | 237 to 282 ms | 233 to 273 ms | 2 % |
+
+The server and four-player rows were flown after the relay and delivery
+decisions above. Lost is then what the link drops: 2 % each way is 4 % over the
+two links between joiners. The readout was within 8 ms of the real delay in
+every run but one pair at 25 ms of jitter (12 ms). Not covered: the
+screen's own delay (a frame or two, the same for every aircraft), and a link
+whose two directions differ, where half the round trip is the wrong split.
 
 ### Code
 
@@ -481,9 +574,12 @@ is the same code as a player's host with no local pilot.
 6. **Dedicated server:** only if needed.
 
 Steps 1 to 4 and 6 are built. Delay and loss were tested on the smoothing code
-with simulated loss and jitter, not on a real link. Step 5 needs two machines in
-different homes and a Windows build, and is still to do. Until then, how the game
-feels at real latency is unknown.
+with simulated loss and jitter, and since 2026-11-14 on whole games through a
+local proxy that delays, shuffles and drops packets (see
+[Measuring the link](#measuring-the-link)), not on a real link. Step 5 needs two
+machines in different homes and a Windows build, and is still to do. Until then,
+how the game feels at real latency is unknown; the performance readout (F3) now
+shows what that latency is.
 
 ## Prototype evidence
 

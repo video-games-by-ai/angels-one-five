@@ -41,6 +41,7 @@ func _init() -> void:
 	_test_flaps_and_wing_flex()
 	_test_valley_path()
 	_test_volume_settings_persist()
+	_test_frame_stats()
 	# The second map: same terrain, route and AI checks on its own data.
 	terrain = TerrainData.load_map("plav")
 	Weather.use_map(terrain)
@@ -1029,3 +1030,32 @@ func _test_volume_settings_persist() -> void:
 	check(AudioServer.is_bus_mute(effects_bus), "zero volume mutes the effects bus")
 	loaded.apply_audio()
 	check(AudioServer.bus_count == 3, "applying twice adds no duplicate buses")
+
+
+## The stats readout's frame figures: an average hides three slow frames in
+## three hundred, the 1% low and the slowest frame show them.
+func _test_frame_stats() -> void:
+	var f: FrameStats = FrameStats.new()
+	for i in range(300):
+		f.add(0.05 if i % 100 == 50 else 0.01)
+	f.summarise()
+	check(f.avg_fps > 95.0 and f.avg_fps < 100.0, "three slow frames in 300 barely move the average (%.0f FPS)" % f.avg_fps)
+	check(absf(f.low_fps - 20.0) < 0.5 and absf(f.worst_ms - 50.0) < 0.01, "the 1%% low (%.0f FPS) and the slowest frame (%.0f ms) show them" % [f.low_fps, f.worst_ms])
+	var last: PackedFloat32Array = f.recent(50)
+	check(last.size() == 50 and absf(last[0] - 50.0) < 0.01 and absf(last[49] - 10.0) < 0.01, "the graph gets the newest frames, oldest first")
+	for i in range(3000):
+		f.add(0.004)
+	f.summarise()
+	check(f.count() >= 1240 and f.count() <= 1251 and absf(f.worst_ms - 4.0) < 0.01 and absf(f.low_fps - 250.0) < 1.0,
+		"only the last five seconds count (%d frames kept), so an old hitch drops out" % f.count())
+	for i in range(5000):
+		f.add(0.001)
+	f.summarise()
+	check(f.count() == FrameStats.CAPACITY and absf(f.avg_fps - 1000.0) < 1.0, "at very high frame rates it keeps the newest %d frames" % FrameStats.CAPACITY)
+	var path: String = "user://test_settings.cfg"
+	var s: GameSettings = GameSettings.new()
+	s.stats_level = StatsOverlay.Level.FULL
+	s.save(path)
+	var loaded: GameSettings = GameSettings.load_or_default(path)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	check(loaded.stats_level == StatsOverlay.Level.FULL and GameSettings.new().stats_level == StatsOverlay.Level.OFF, "the readout is off by default and the chosen level persists")

@@ -41,6 +41,8 @@ const BAD_PACKET_LIMIT: int = 25
 const CHAT_KEEP: int = 20          ## chat lines remembered (the chat box shows the newest few)
 const CHAT_BURST: int = 4          ## host: messages one joiner may send at once…
 const CHAT_REFILL: float = 1.5     ## …then one more per this many seconds; extra ones are dropped
+const MEASURE_MS: int = 1000       ## how often pings and the data rate are read (and the host shares the pings)
+const PING_MS: int = 250           ## how often each connection is asked to time a round trip
 
 static var current: NetSession
 
@@ -62,6 +64,13 @@ var reached_from_outside: bool = false
 ## Kept here so lines survive the scene reload a joiner does to load the host's map.
 var chat_log: Array[Dictionary] = []
 var port_mapper: PortMapper
+## Each player's round trip to the host in ms, by peer (the host's own is 0).
+## The host reads them from the connection and shares them once a second; a
+## joiner reads its own the same way and takes the others from the host.
+var pings: Dictionary = {}
+var ping_jitter: float = 0.0      ## joiner: how much its own round trip varies, ms
+var sent_rate: float = 0.0        ## bytes a second this game sends, to everyone together
+var received_rate: float = 0.0
 
 var _key: CryptoKey
 var _cert: X509Certificate
@@ -85,6 +94,8 @@ var _closing: bool = false
 var _sandbox: Node
 var _queue: Array = []
 var _chat_allowance: Dictionary = {}  ## host: peer -> messages it may still send now
+var _measured_at: int = 0             ## Time.get_ticks_msec() of the last link reading
+var _pinged_at: int = 0
 
 
 func _init() -> void:
@@ -358,6 +369,7 @@ func _physics_process(delta: float) -> void:
 		if _connect_to_host() != OK:
 			_end_client(status)
 		return
+	_measure_link()
 	if role == Role.HOST:
 		for peer: int in _chat_allowance:
 			_chat_allowance[peer] = minf(float(_chat_allowance[peer]) + delta / CHAT_REFILL, CHAT_BURST)
@@ -373,8 +385,82 @@ func _exit_tree() -> void:
 		close("")
 
 
+# --- Link measurements ---------------------------------------------------------
+# For the stats readout. The round trip is the connection's own figure: the
+# time from sending a ping to reading its answer, averaged over the last few.
+# Both games read the network once per tick, so it includes those waits, as
+# every game message does. Left alone the connection pings only when nothing
+# else arrives, which in a match is never: its figure would be minutes old.
+# So each end asks for a ping four times a second.
+
+func _measure_link() -> void:
+	var now: int = Time.get_ticks_msec()
+	if enet == null or role == Role.NONE or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		return   # (a session can end inside the poll just before this)
+	if now - _pinged_at >= PING_MS:
+		_pinged_at = now
+		for p: ENetPacketPeer in _measured_peers():
+			p.ping()
+	if now - _measured_at < MEASURE_MS:
+		return
+	var seconds: float = (now - _measured_at) / 1000.0
+	_measured_at = now
+	sent_rate = enet.host.pop_statistic(ENetConnection.HOST_TOTAL_SENT_DATA) / seconds
+	received_rate = enet.host.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_DATA) / seconds
+	if role == Role.HOST:
+		var table: Array[Dictionary] = [{"peer": 1, "ms": 0}]
+		for peer: int in _greeted:
+			var p: ENetPacketPeer = enet.get_peer(peer)
+			if p != null and p.is_active():
+				table.append({"peer": peer, "ms": int(p.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))})
+		pings.clear()
+		for e: Dictionary in table:
+			pings[int(e.peer)] = int(e.ms)
+		if table.size() > 1:
+			broadcast({"type": NetProtocol.Msg.PINGS, "pings": table})
+	elif role == Role.CLIENT:
+		for p: ENetPacketPeer in _measured_peers():
+			pings[my_id()] = int(p.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME))
+			ping_jitter = p.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME_VARIANCE)
+
+
+## The connections whose round trip is measured: a host's accepted joiners,
+## a joiner's host once it is in the lobby (past both handshakes).
+func _measured_peers() -> Array[ENetPacketPeer]:
+	var out: Array[ENetPacketPeer] = []
+	if enet.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return out
+	var ids: Array = _greeted.keys() if role == Role.HOST else ([1] if role == Role.CLIENT and not players.is_empty() else [])
+	for peer: int in ids:
+		var p: ENetPacketPeer = enet.get_peer(peer)
+		if p != null and p.is_active():
+			out.append(p)
+	return out
+
+
+## Round trip between `peer` and the host in ms (0 for the host itself); -1 while unknown.
+func ping_ms(peer: int) -> float:
+	return 0.0 if peer == 1 else float(pings.get(peer, -1))
+
+
+## How long a motion report from `peer`'s game takes to reach this one, in ms:
+## half of each round trip on its way (through the host, when neither end is
+## the host). -1 while unknown.
+func transit_ms(peer: int) -> float:
+	var mine: float = ping_ms(my_id())
+	var theirs: float = ping_ms(peer)
+	if mine < 0.0 or theirs < 0.0:
+		return -1.0
+	return (mine + theirs) * 0.5   # (the host passes reports on as they arrive)
+
+
+## Unreliable messages go unordered. Ordered, the connection discards a packet
+## that arrives after one sent later, whatever is in it: the host sends each
+## joiner several aircraft's reports within a millisecond, and a little jitter
+## cost up to half of them. Every reader already drops what is out of date for
+## its own aircraft, by the report's tick.
 func _mode(type: int) -> MultiplayerPeer.TransferMode:
-	return MultiplayerPeer.TRANSFER_MODE_UNRELIABLE_ORDERED if NetProtocol.UNRELIABLE.has(type) else MultiplayerPeer.TRANSFER_MODE_RELIABLE
+	return MultiplayerPeer.TRANSFER_MODE_UNRELIABLE if NetProtocol.UNRELIABLE.has(type) else MultiplayerPeer.TRANSFER_MODE_RELIABLE
 
 
 func _send_raw(peer: int, msg: Dictionary) -> void:
@@ -516,6 +602,18 @@ func _on_peer_connected(peer: int) -> void:
 		var p: ENetPacketPeer = enet.get_peer(peer)
 		if p != null:
 			p.set_timeout(0, 8000, 15000)
+			_never_throttle(p)
+
+
+## ENet discards a share of unreliable packets (here: every motion report)
+## whenever a round trip takes much longer than its recent best, and lets them
+## through again only step by step. One hitch, such as a game loading the map,
+## took it to "discard all", and aircraft froze on a link that was fine. That
+## saves nothing at a few kilobytes a second, so it is switched off: with a
+## deceleration of 0 the share sent never drops. The setting travels to the
+## other end and covers both directions.
+static func _never_throttle(p: ENetPacketPeer) -> void:
+	p.throttle_configure(5000, 2, 0)
 
 
 func _on_peer_disconnected(peer: int) -> void:
@@ -541,6 +639,7 @@ func _on_connected_to_server() -> void:
 	var p: ENetPacketPeer = enet.get_peer(1)
 	if p != null:
 		p.set_timeout(0, 8000, 15000)
+		_never_throttle(p)
 	status = "Connected. Waiting for the host…"
 	_send_raw(1, {"type": NetProtocol.Msg.HELLO, "version": NetProtocol.VERSION, "frame": local_frame, "name": local_name})
 	changed.emit()
@@ -599,6 +698,14 @@ func _on_packet(peer: int, bytes: PackedByteArray) -> void:
 			changed.emit()
 		NetProtocol.Msg.CHAT:
 			_add_chat(int(msg.peer), String(msg.name), String(msg.text))
+		NetProtocol.Msg.PINGS:
+			var me: int = my_id()
+			for other: int in pings.keys():
+				if other != me:
+					pings.erase(other)
+			for e: Dictionary in msg.pings:
+				if int(e.peer) != me:   # our own we measure ourselves
+					pings[int(e.peer)] = int(e.ms)
 		_:
 			_deliver(peer, msg)
 
